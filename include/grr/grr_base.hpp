@@ -12,10 +12,10 @@
 #include <system_error>
 #include <cstdint>
 
-#ifdef GRR_TS_REFLECT
-#ifndef __cpp_lib_reflection
+#ifdef __cpp_lib_reflection
+#define GRR_TS_REFLECT
+#elif defined(GRR_TS_REFLECT)
 #error Unsupported compile for C++ reflection feature
-#endif
 #endif
 
 #if defined(_MSC_VER) && __cplusplus == 199711L
@@ -161,18 +161,19 @@ namespace grr
 	template<typename T>
 	constexpr
 	auto
-	get_type_name()
+	type_name()
 	{
 		// #TODO: must be fixed
 		return typeid(T).name();
 	}
 
+	template<typename T>
 	constexpr 
-	uint64_t 
+	T
 	binhash(const char* str)
 	{
 		std::uint32_t counter = 0;
-		std::uint64_t hash = std::uint64_t(-1);
+		T hash = T(-1);
 		while (*str != '\0') {
 			hash *= 0x21;
 			hash += str[counter];
@@ -184,17 +185,17 @@ namespace grr
 
 	constexpr
 	type_id
-	get_type_id(const string_view& name)
+	obtain_id(const string_view& name)
 	{
-		return static_cast<type_id>(binhash(name.data()));
+		return binhash<type_id>(name.data());
 	}
 
 	template<typename T>
 	constexpr
 	type_id
-	get_type_id()
+	obtain_id()
 	{
-		return get_type_id(get_type_name<T>());
+		return obtain_id(type_name<T>());
 	}
 
 	inline
@@ -216,7 +217,7 @@ namespace grr
 	bool
 	contains(const context& current_context)
 	{
-		return current_context.contains(get_type_id<T>());
+		return current_context.contains(obtain_id<T>());
 	}
 
 	template<typename T>
@@ -224,7 +225,7 @@ namespace grr
 	bool
 	size(const context& current_context)
 	{
-		return current_context.size(get_type_id<T>());
+		return current_context.size(obtain_id<T>());
 	}
 
 	enum class errors : int
@@ -260,7 +261,7 @@ namespace grr
 	{
 		return std::error_code(static_cast<int>(e), error_category::get());
 	}
-
+	
 	class type
 	{
 	private:
@@ -273,25 +274,21 @@ namespace grr
 		type(type&) = delete;
 		type(type&&) = default;
 
-		template<typename T>
 		type(const context& in_context)
-			: current_context(&in_context), tname(get_type_name<T>()), tid(get_type_id<T>()) {}
-
-		type(const context& in_context)
-			: current_context(&in_context), tname(generate_type_name()), tid(get_type_id(tname)) {}
+			: current_context(&in_context), tname(generate_type_name()), tid(obtain_id(tname)) {}
 
 		type(const context& in_context, const char* type_name)
-			: current_context(&in_context), tname(type_name), tid(get_type_id(tname)) {}
+			: current_context(&in_context), tname(type_name), tid(obtain_id(tname)) {}
 
 		type(const context& in_context, const string_view& type_name)
-			: current_context(&in_context), tname(type_name), tid(get_type_id(tname)) {}
+			: current_context(&in_context), tname(type_name), tid(obtain_id(tname)) {}
 
 	public:
 #ifndef GRR_DISABLE_EXCEPTIONS
 		template<typename T>
 		void emplace(const char* member_name)
 		{
-			type_id id = get_type_id<T>();
+			type_id id = obtain_id<T>();
 			if (!grr::contains(*current_context, id)) {
 				throw new std::invalid_argument("unregistered type id");
 			}
@@ -302,7 +299,7 @@ namespace grr
 		template<typename T>
 		void emplace(const string_view& member_name)
 		{
-			type_id id = get_type_id<T>();
+			type_id id = obtain_id<T>();
 			if (!grr::contains(*current_context, id)) {
 				throw new std::invalid_argument("unregistered type id");
 			}
@@ -331,7 +328,7 @@ namespace grr
 		template<typename T>
 		void emplace(const char* member_name, std::error_code& err)
 		{
-			type_id id = get_type_id<T>();
+			type_id id = obtain_id<T>();
 			if (!grr::contains(*current_context, id)) {
 				err = make_error_code(errors::invalid_argument);
 				return;
@@ -343,7 +340,7 @@ namespace grr
 		template<typename T>
 		void emplace(const string_view& member_name, std::error_code& err)
 		{
-			type_id id = get_type_id<T>();
+			type_id id = obtain_id<T>();
 			if (!grr::contains(*current_context, id)) {
 				err = make_error_code(errors::invalid_argument);
 				return;
@@ -451,6 +448,7 @@ namespace grr
 		void name(const char* new_name)
 		{
 			tname = new_name;
+			tid = grr::obtain_id(new_name);
 		}
 
 	public:
