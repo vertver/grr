@@ -163,7 +163,8 @@ namespace grr
 	auto
 	get_type_name()
 	{
-		// typeid(T).name()
+		// #TODO: must be fixed
+		return typeid(T).name();
 	}
 
 	constexpr 
@@ -193,7 +194,7 @@ namespace grr
 	type_id
 	get_type_id()
 	{
-		return get_type_id();
+		return get_type_id(get_type_name<T>());
 	}
 
 	inline
