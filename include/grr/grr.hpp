@@ -5,5 +5,5 @@
 ***************************************************************************************/
 #ifndef GRR_HPP_INCLUDED
 #define GRR_HPP_INCLUDED
-#include <grr_base.hpp>
+#include <grr/grr_base.hpp>
 #endif

@@ -1,0 +1,8 @@
+add_executable("big_sample" "big_sample.cpp")
+target_link_libraries("big_sample" PRIVATE GRR::grr)
+set_target_properties("big_sample" PROPERTIES LINKER_LANGUAGE CXX)
+if (GRR_CXX20)
+	target_compile_features("big_sample" PRIVATE cxx_std_20)
+else()
+	target_compile_features("big_sample" PRIVATE cxx_std_17)
+endif()
