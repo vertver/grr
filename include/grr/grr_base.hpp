@@ -82,7 +82,7 @@
 
 namespace grr
 {
-	struct struct_context;
+	struct type_context;
 	class context;
 	class type;
 
