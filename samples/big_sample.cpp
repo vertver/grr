@@ -1,20 +1,27 @@
 #include <grr/grr.hpp>
+#include <iostream>
 
 struct my_struct
 {
 	int a;
+	std::uint64_t b;
 };
 
 int main()
 {
-	grr::context context;
+	grr::context context = grr::make_context();
+	my_struct stric = {};
+	stric.a = 1;
+	stric.b = 2;
 
-
-	if (!grr::contains<my_struct>(context)) {
-		grr::type new_type = grr::type(context);
-		new_type.name(grr::type_name<my_struct>());
-		new_type.emplace<int>("a");
-	}
+	grr::add_type<my_struct>(context);
+	grr::visit(context, &stric, grr::obtain_id<my_struct>(), []<typename T>(const T& field, const char* name) {
+		if constexpr (std::is_integral_v<T>) {
+			std::cout << name << ": " << std::to_string(field) << std::endl;
+		} else {
+			std::cout << name << ": " << "unknown memory" << std::endl;
+		}
+	});
 
 	return 0;
 }

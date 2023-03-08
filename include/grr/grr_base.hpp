@@ -5,17 +5,23 @@
 ***************************************************************************************/
 #ifndef GRR_BASE_HPP_INCLUDED
 #define GRR_BASE_HPP_INCLUDED
-#include <grr/visit_struct/visit_struct.hpp>
-#include <grr/visit_struct/visit_struct_intrusive.hpp>
-
 #include <typeinfo>
 #include <system_error>
 #include <cstdint>
+#include <utility>
 
-#ifdef __cpp_lib_reflection
-#define GRR_TS_REFLECT
-#elif defined(GRR_TS_REFLECT)
+#ifdef GRR_PREDECLARE_FIELDS
+#include <pfr.hpp>
+#include <grr/visit_struct/visit_struct.hpp>
+#include <grr/visit_struct/visit_struct_intrusive.hpp>
+#endif
+
+#if defined(GRR_TS_REFLECT) && !defined(__cpp_lib_reflection)
 #error Unsupported compile for C++ reflection feature
+#endif
+
+#ifndef GRR_USER_TYPES
+#define GRR_USER_TYPES
 #endif
 
 #if defined(_MSC_VER) && __cplusplus == 199711L
@@ -26,8 +32,7 @@
 
 #if GRR_CXX >= 202002L
 #define GRR_CXX20_SUPPORT 1
-#elif GRR_CXX >= 201703L
-#else
+#elif GRR_CXX < 201703L
 #error Incompatible version of C++
 #endif
 
@@ -36,6 +41,14 @@
 #define GRR_CONSTEXPR constexpr
 #else
 #define GRR_CONSTEXPR
+#endif
+#endif
+
+#ifndef GRR_TYPE_NAME
+#ifdef _MSC_VER
+#define GRR_TYPE_NAME __FUNCSIG__
+#else
+#define GRR_TYPE_NAME __PRETTY_FUNCTION__
 #endif
 #endif
 
@@ -84,7 +97,7 @@ namespace grr
 {
 	struct type_context;
 	class context;
-	class type;
+	class type_declaration;
 
 	template<typename T>
 	using vector = GRR_VECTOR<T>;
@@ -99,138 +112,39 @@ namespace grr
 	using string_view = GRR_STRING_VIEW;
 	using type_id = GRR_TYPE_ID;
 
-	struct member
-	{
-		member(const char* new_name, type_id new_id) : name(new_name), id(new_id) {}
-		member(const string_view& new_name, type_id new_id) : name(new_name), id(new_id) {}
-		member() = default;
-		member(const member&) = default;
-		member(member&&) = default;
-		member& operator=(const member&) = default;
-		member& operator=(member&&) = default;
+	using ptr_pair = std::pair<std::uint64_t, std::pair<void*, type_id>>;
+	using const_ptr_pair = std::pair<std::uint64_t, std::pair<const void*, type_id>>;
 
-		string_view name;
-		type_id id;
-	};
-
-	struct type_context
-	{
-		type_id id;
-		std::size_t size;
-		string_view name;
-		std::uint8_t user_memory[sizeof(void*) * 2];
-		vector<std::pair<std::uint32_t, member>> members;
-	};
-
-	class context
-	{
-	private:
-		using storage_map = hash_map<type_id, type_context>;
-		hash_map<type_id, type_context> storage;
-
-	public:
-		bool contains(type_id id) const
-		{
-#ifdef GRR_CXX20
-			return storage.contains(id);
-#else
-			return storage.find(id) != storage.end();
+#ifndef GRR_TYPES
+#define GRR_TYPES \
+	void*, \
+	char, \
+	unsigned char, \
+	short, \
+	unsigned short, \
+	int, \
+	unsigned int, \
+	std::int8_t, \
+	std::int16_t, \
+	std::int32_t, \
+	std::int64_t, \
+	std::uint8_t, \
+	std::uint16_t, \
+	std::uint32_t, \
+	std::uint64_t, \
+	\
+	char*, \
+	\
+	grr::ptr_pair, \
+	grr::const_ptr_pair, \
+	grr::type_id \
+	GRR_USER_TYPES
 #endif
-		}
-
-		std::size_t size(type_id id) const
-		{
-			const auto& it = storage.find(id);
-			if (it == storage.end()) {
-				return static_cast<std::size_t>(-1);
-			}
-
-			return 0;
-		}
-
-
-	};
-
-	constexpr
-	auto
-	generate_type_name()
-	{
-		return "";
-	}
-
-	template<typename T>
-	constexpr
-	auto
-	type_name()
-	{
-		// #TODO: must be fixed
-		return typeid(T).name();
-	}
-
-	template<typename T>
-	constexpr 
-	T
-	binhash(const char* str)
-	{
-		std::uint32_t counter = 0;
-		T hash = T(-1);
-		while (*str != '\0') {
-			hash *= 0x21;
-			hash += str[counter];
-			counter++;
-		}
-
-		return hash;
-	}
-
-	constexpr
-	type_id
-	obtain_id(const string_view& name)
-	{
-		return binhash<type_id>(name.data());
-	}
-
-	template<typename T>
-	constexpr
-	type_id
-	obtain_id()
-	{
-		return obtain_id(type_name<T>());
-	}
-
-	inline
-	std::size_t
-	size(const context& current_context, type_id id)
-	{
-		return current_context.size(id);
-	}
-
-	inline
-	bool
-	contains(const context& current_context, type_id id)
-	{
-		return current_context.contains(id);
-	}
-
-	template<typename T>
-	constexpr
-	bool
-	contains(const context& current_context)
-	{
-		return current_context.contains(obtain_id<T>());
-	}
-
-	template<typename T>
-	constexpr
-	bool
-	size(const context& current_context)
-	{
-		return current_context.size(obtain_id<T>());
-	}
 
 	enum class errors : int
 	{
 		invalid_argument,
+		unregistered_id,
 		out_of_range
 	};
 
@@ -261,127 +175,311 @@ namespace grr
 	{
 		return std::error_code(static_cast<int>(e), error_category::get());
 	}
-	
-	class type
+
+	struct field
+	{
+		field(const char* new_name, type_id new_id, std::size_t new_offset)
+			: name(new_name), id(new_id), offset(new_offset) {}
+
+		field(const string_view& new_name, type_id new_id, std::size_t new_offset)
+			: name(new_name), id(new_id), offset(new_offset) {}
+
+		field() = default;
+		field(const field&) = default;
+		field(field&&) = default;
+		field& operator=(const field&) = default;
+		field& operator=(field&&) = default;
+
+		std::size_t offset;
+		type_id id;
+		string name;
+	};
+
+	struct type_context
+	{
+		type_id id;
+		std::size_t size;
+		string display_name;
+		string real_name;
+		vector<field> fields;
+	};
+
+	class context
 	{
 	private:
-		const context* current_context;
-		string_view tname;
-		type_id tid;
-		vector<member> members;
+		using storage_map = hash_map<type_id, type_context>;
+		hash_map<type_id, type_context> storage;
 
 	public:
-		type(type&) = delete;
-		type(type&&) = default;
-
-		type(const context& in_context)
-			: current_context(&in_context), tname(generate_type_name()), tid(obtain_id(tname)) {}
-
-		type(const context& in_context, const char* type_name)
-			: current_context(&in_context), tname(type_name), tid(obtain_id(tname)) {}
-
-		type(const context& in_context, const string_view& type_name)
-			: current_context(&in_context), tname(type_name), tid(obtain_id(tname)) {}
-
-	public:
-#ifndef GRR_DISABLE_EXCEPTIONS
-		template<typename T>
-		void emplace(const char* member_name)
+		bool contains(type_id id) const
 		{
-			type_id id = obtain_id<T>();
-			if (!grr::contains(*current_context, id)) {
-				throw new std::invalid_argument("unregistered type id");
-			}
-
-			members.emplace_back(std::move(member(member_name, id)));
-		}
-
-		template<typename T>
-		void emplace(const string_view& member_name)
-		{
-			type_id id = obtain_id<T>();
-			if (!grr::contains(*current_context, id)) {
-				throw new std::invalid_argument("unregistered type id");
-			}
-
-			members.emplace_back(std::move(member(member_name, id)));
-		}
-
-		void emplace(member&& move_member)
-		{
-			if (!grr::contains(*current_context, move_member.id)) {
-				throw new std::invalid_argument("unregistered type id");
-			}
-
-			members.emplace_back(move_member);
-		}
-
-		void emplace(const member& new_member)
-		{
-			if (!grr::contains(*current_context, new_member.id)) {
-				throw new std::invalid_argument("unregistered type id");
-			}
-
-			members.emplace_back(new_member);
-		}
+#ifdef GRR_CXX20
+			return storage.contains(id);
+#else
+			return storage.find(id) != storage.end();
 #endif
-		template<typename T>
-		void emplace(const char* member_name, std::error_code& err)
+		}
+
+		std::size_t size(type_id id) const
 		{
-			type_id id = obtain_id<T>();
-			if (!grr::contains(*current_context, id)) {
-				err = make_error_code(errors::invalid_argument);
+			const auto& it = storage.find(id);
+			if (it == storage.end()) {
+				return static_cast<std::size_t>(-1);
+			}
+
+			return 0;
+		}
+
+		const type_context& obtain(type_id id) const
+		{
+			return storage.at(id);
+		}
+
+		void add(const type_context& type)
+		{
+			storage.emplace(std::make_pair(type.id, type));
+		}
+
+		void add(type_context&& type)
+		{
+			storage.emplace(std::make_pair(type.id, type));
+		}
+	};
+
+	constexpr
+	auto
+	generate_type_name()
+	{
+		constexpr const char* alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+		std::string type_name;
+		type_name.reserve(16);
+		for (int i = 0; i < 16; ++i) {
+			type_name += alphanum[rand() % (64 - 1)];
+		}
+
+		return type_name;
+	}
+
+	template<typename T>
+	constexpr
+	auto
+	type_name()
+	{
+		return GRR_TYPE_NAME;
+	}
+
+	template<typename T>
+	constexpr
+	T
+	binhash(const char* str)
+	{
+		return *str != '\0' ? static_cast<unsigned int>(*str) + 33 * binhash<T>(str + 1) : 5381;
+	}
+
+	constexpr
+	inline
+	type_id
+	obtain_id(const string_view& name)
+	{
+		return binhash<type_id>(name.data());
+	}
+
+	constexpr
+	inline
+	type_id
+	obtain_id(const char* name)
+	{
+		return binhash<type_id>(name);
+	}
+
+	template<typename T>
+	constexpr
+	type_id
+	obtain_id()
+	{
+		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
+		return obtain_id(type_name<CT>());
+	}
+
+	inline
+	std::size_t
+	size(const context& current_context, type_id id)
+	{
+		return current_context.size(id);
+	}
+
+	inline
+	bool
+	contains(const context& current_context, type_id id)
+	{
+		return current_context.contains(id);
+	}
+
+	template<typename T>
+	constexpr
+	bool
+	contains(const context& current_context)
+	{
+		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
+		return current_context.contains(obtain_id<CT>());
+	}
+
+	template<typename T>
+	constexpr
+	bool
+	size(const context& current_context)
+	{
+		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
+		return current_context.size(obtain_id<CT>());
+	}
+
+	//    grr::visit(context, data, id, []<typename T>(const T& field, const char* name) {
+	//        if constexpr (std::is_same_v<std::remove_cv<T>, void*>>) {
+	//            return;
+	//        } else if constexpr (std::is_same_v<std::remove_cv<T>, grr::ptr_pair>>) {
+	//            std::cout << "raw data (size: " << field.left << ")";
+	//            return;
+	//        }
+	//        
+	//        std::cout << grr::stringify(field);
+	//    }
+
+	template<typename T>
+	static constexpr void visit_static_once(const void* data, const char* name, type_id id, bool& called, auto&& func)
+	{
+		constexpr type_id current_id = grr::obtain_id<T>();
+		if (!called && current_id == id) {
+			func(*reinterpret_cast<const T*>(data), name);
+			called = true;
+		}
+	}
+
+	template<typename... Types>
+	static constexpr bool visit_static(const void* data, const char* name, type_id id, auto&& func)
+	{
+		bool called = false;
+		(visit_static_once<Types>(data, name, id, called, func), ...);
+		return called;
+	}
+
+	template<std::size_t recursion_level = 0>
+	static constexpr void visit(const grr::context& context, const void* data, type_id id, std::error_code& err, auto&& func)
+	{
+		if (!context.contains(id)) {
+			err = make_error_code(errors::unregistered_id);
+			return;
+		}
+
+		const auto& type_info = context.obtain(id);
+		for (const auto& cfield : type_info.fields) {
+			if (err) {
 				return;
 			}
 
-			members.emplace_back(std::move(member(member_name, id)));
-		}
+			const void* field_ptr = static_cast<const char*>(data) + cfield.offset;
+			type_id field_id = cfield.id;
 
-		template<typename T>
-		void emplace(const string_view& member_name, std::error_code& err)
-		{
-			type_id id = obtain_id<T>();
-			if (!grr::contains(*current_context, id)) {
-				err = make_error_code(errors::invalid_argument);
-				return;
-			}
-
-			members.emplace_back(std::move(member(member_name, id)));
-		}
-
-		void emplace(member&& move_member, std::error_code& err)
-		{
-			if (!grr::contains(*current_context, move_member.id)) {
-				err = make_error_code(errors::invalid_argument);
-				return;
-			}
-
-			members.emplace_back(move_member);
-		}
-
-		void emplace(const member& new_member, std::error_code& err)
-		{
-			if (!grr::contains(*current_context, new_member.id)) {
-				err = make_error_code(errors::invalid_argument);
-				return;
-			}
-
-			members.emplace_back(new_member);
-		}
-
-	private:
-		bool member_erase(const char* member_name)
-		{
-			const std::size_t name_size = std::strlen(member_name);
-			for (auto it = members.begin(); it != members.end(); it++) {
-				const auto& member_elem = *it;
-				std::size_t member_name_size = std::strlen(member_elem.name.data());
-				if (name_size != member_name_size) {
+			if constexpr (recursion_level > 0) {
+				visit<recursion_level - 1>(context, field_ptr, field_id);
+			} else {
+				if (visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, err, func)) {
 					continue;
 				}
 
-				if (!std::strncmp(member_name, member_elem.name.data(), name_size)) {
-					members.erase(it);
+				if (err) {
+					return;
+				}
+
+				if (!context.contains(field_id)) {
+					err = make_error_code(errors::unregistered_id);
+					return;
+				}
+
+				const auto& field_type = context.obtain(field_id);
+				func(std::make_pair(field_type.size, std::make_pair(field_ptr, field_id)), cfield.second.name.data());
+			}
+		}
+	}
+
+#ifndef GRR_DISABLE_EXCEPTIONS
+	template<std::size_t recursion_level = 0>
+	static constexpr void visit(const grr::context& context, const void* data, type_id id, auto&& func)
+	{
+		if (!context.contains(id)) {
+			throw new std::invalid_argument("unregistered type id " + std::to_string(id));
+		}
+
+		const auto& type_info = context.obtain(id);
+		for (const auto& cfield : type_info.fields) {
+			const void* field_ptr = static_cast<const char*>(data) + cfield.offset;
+			type_id field_id = cfield.id;
+
+			if constexpr (recursion_level > 0) {
+				visit<recursion_level - 1>(context, field_ptr, field_id);
+			} else {
+				if (visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
+					continue;
+				}
+
+				if (!context.contains(field_id)) {
+					throw new std::invalid_argument("unregistered type id " + std::to_string(field_id));
+				}
+
+				const auto& field_type = context.obtain(field_id);
+				func(std::make_pair(field_type.size, std::make_pair(field_ptr, field_id)), cfield.name.data());
+			}
+		}
+	}
+
+	template<std::size_t recursion_levels = 0, typename T>
+	static constexpr void visit(const grr::context& context, const T& data, auto&& func)
+	{
+		constexpr type_id id = grr::obtain_id<T>();
+		if (!context.contains(id)) {
+			throw new std::invalid_argument("unregistered type id " + std::to_string(id));
+		}
+
+		if constexpr (recursion_levels > 0) {
+
+		}
+		else {
+
+		}
+	}
+#endif
+
+	struct type_declaration
+	{
+		const context* current_context;
+		std::size_t size;
+		string real_name;
+		type_id id;
+		vector<field> fields;
+
+		type_declaration(type_declaration&) = delete;
+		type_declaration(type_declaration&&) = default;
+
+		type_declaration(const context& in_context)
+			: current_context(&in_context), real_name(generate_type_name()), id(obtain_id(real_name.data())), size(0) {}
+
+		type_declaration(const context& in_context, const char* type_name)
+			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name.data())), size(0) {}
+
+		type_declaration(const context& in_context, const string_view& type_name)
+			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name.data())), size(0) {}
+
+		bool field_erase(const char* field_name)
+		{
+			const std::size_t name_size = std::strlen(field_name);
+			for (auto it = fields.begin(); it != fields.end(); it++) {
+				const auto& field_elem = *it;
+				std::size_t field_name_size = std::strlen(field_elem.name.data());
+				if (name_size != field_name_size) {
+					continue;
+				}
+
+				if (!std::strncmp(field_name, field_elem.name.data(), name_size)) {
+					fields.erase(it);
 					return true;
 				}
 			}
@@ -389,95 +487,111 @@ namespace grr
 			return false;
 		}
 
-		bool member_erase(std::size_t idx)
+		bool field_erase(std::size_t idx)
 		{
-			if (idx >= members.size()) {
+			if (idx >= fields.size()) {
 				return false;
 			}
 
-			members.erase(members.begin() + idx);
+			fields.erase(fields.begin() + idx);
 			return true;
 		}
 
-	public:
-#ifndef GRR_DISABLE_EXCEPTIONS
+		template<typename T>
+		void emplace(const char* field_name)
+		{
+			constexpr type_id current_id = obtain_id<T>();
+			if (!grr::contains(*current_context, current_id)) {
+				throw new std::invalid_argument("unregistered type id");
+			}
+
+			const std::size_t offset = fields.empty() ? 0 : fields.back().offset + grr::size(*current_context, fields.back().id);
+			fields.emplace_back(std::move(field(field_name, current_id, offset)));
+		}
+
+		template<typename T>
+		void emplace(const char* field_name, std::size_t offset)
+		{
+			constexpr type_id current_id = obtain_id<T>();
+			if (!grr::contains(*current_context, current_id)) {
+				throw new std::invalid_argument("unregistered type id");
+			}
+
+			fields.emplace_back(std::move(field(field_name, current_id, offset)));
+		}
+
 		void erase(std::size_t idx)
 		{
-			if (!member_erase(idx)) {
+			if (!field_erase(idx)) {
 				throw new std::invalid_argument("invalid index");
 			}
 		}
 
-		void erase(const char* member_name)
+		void erase(const char* field_name)
 		{
-			if (!member_erase(member_name)) {
-				throw new std::invalid_argument("invalid member name");
+			if (!field_erase(field_name)) {
+				throw new std::invalid_argument("invalid field name");
 			}
-		}	
-		
-		void erase(const string_view& member_name)
-		{
-			if (!member_erase(member_name.data())) {
-				throw new std::invalid_argument("invalid member name");
-			}
-		}
-#endif
-
-		void erase(std::size_t idx, std::error_code& err) noexcept
-		{
-			if (!member_erase(idx)) {
-				err = make_error_code(errors::invalid_argument);
-			}
-		}
-
-		void erase(const char* member_name, std::error_code& err) noexcept
-		{
-			if (!member_erase(member_name)) {
-				err = make_error_code(errors::invalid_argument);
-			}
-		}	
-		
-		void erase(const string_view& member_name, std::error_code& err) noexcept
-		{
-			if (!member_erase(member_name.data())) {
-				err = make_error_code(errors::invalid_argument);
-			}
-		}
-
-	public:
-		void name(const char* new_name)
-		{
-			tname = new_name;
-			tid = grr::obtain_id(new_name);
-		}
-
-	public:
-		GRR_CONSTEXPR const string_view& name() const noexcept
-		{
-			return tname;
-		}
-
-		GRR_CONSTEXPR type_id id() const noexcept
-		{
-			return tid;
-		}
-
-		GRR_CONSTEXPR std::size_t count() const noexcept
-		{
-			return members.size();
-		}
-
-		GRR_CONSTEXPR std::size_t size() const noexcept
-		{
-			std::size_t type_size = 0;
-			for (const auto& elem : members) {
-				type_size += grr::size(*current_context, elem.id);
-			}
-
-			return type_size;
 		}
 	};
 
+	inline
+	void
+	register_type(context& current_context, const type_declaration& type)
+	{
+		if (current_context.contains(type.id)) {
+
+		}
+
+		type_context tcontext;
+		tcontext.id = type.id;
+		tcontext.real_name = type.real_name;
+		tcontext.display_name = type.real_name;
+		tcontext.fields = type.fields;
+		tcontext.size = type.size;
+		current_context.add(std::move(tcontext));
+	}
+
+	template<typename T>
+	void
+	add_type(context& current_context)
+	{
+		using CT = std::remove_cv_t<T>;
+
+		type_declaration new_type = type_declaration(current_context, grr::type_name<T>());
+#ifdef GRR_PREDECLARE_FIELDS
+		if constexpr (std::is_class_v<CT> && !std::is_same_v<CT, grr::ptr_pair> && !std::is_same_v<CT, grr::const_ptr_pair>) {
+			CT val = {};
+			static_assert(!visit_struct::traits::is_visitable<CT>::value);
+
+			pfr::for_each_field(val, [&val, &new_type](auto& field) {
+				std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
+				std::string field_name = "var" + std::to_string(offset);
+				new_type.emplace<decltype(field)>(field_name.data());
+				new_type.size += sizeof(field);
+			});
+		} else {
+			new_type.size = sizeof(CT);
+		}
+#endif
+
+		grr::register_type(current_context, new_type);
+	}
+
+	template<typename... Types>
+	void
+	add_types(context& current_context)
+	{
+		(add_type<Types>(current_context), ...);
+	}
+
+	context
+	make_context()
+	{
+		context out_context;
+		add_types<GRR_TYPES>(out_context);
+		return out_context;
+	}
 }
 
 #endif
