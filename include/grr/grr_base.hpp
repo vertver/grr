@@ -12,8 +12,8 @@
 
 #ifdef GRR_PREDECLARE_FIELDS
 #include <pfr.hpp>
-#include <grr/visit_struct/visit_struct.hpp>
-#include <grr/visit_struct/visit_struct_intrusive.hpp>
+#include <visit_struct/visit_struct.hpp>
+#include <visit_struct/visit_struct_intrusive.hpp>
 #endif
 
 #if defined(GRR_TS_REFLECT) && !defined(__cpp_lib_reflection)
@@ -227,7 +227,7 @@ namespace grr
 				return static_cast<std::size_t>(-1);
 			}
 
-			return 0;
+			return it->second.size;
 		}
 
 		const type_context& obtain(type_id id) const
@@ -505,7 +505,8 @@ namespace grr
 				throw new std::invalid_argument("unregistered type id");
 			}
 
-			const std::size_t offset = fields.empty() ? 0 : fields.back().offset + grr::size(*current_context, fields.back().id);
+			const std::size_t type_size = fields.empty() ? 0 : grr::size(*current_context, fields.back().id);
+			const std::size_t offset = fields.empty() ? 0 : fields.back().offset + type_size;
 			fields.emplace_back(std::move(field(field_name, current_id, offset)));
 		}
 
@@ -567,7 +568,7 @@ namespace grr
 			pfr::for_each_field(val, [&val, &new_type](auto& field) {
 				std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
 				std::string field_name = "var" + std::to_string(offset);
-				new_type.emplace<decltype(field)>(field_name.data());
+				new_type.emplace<decltype(field)>(field_name.data(), offset);
 				new_type.size += sizeof(field);
 			});
 		} else {

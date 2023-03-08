@@ -29,7 +29,7 @@
  * no definition, which you simply aren't permitted to odr-use.
  */
 
-#include <grr/visit_struct/visit_struct.hpp>
+#include <visit_struct/visit_struct.hpp>
 
 namespace visit_struct {
 
