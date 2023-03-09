@@ -445,7 +445,11 @@ namespace grr
 	static constexpr void visit(const grr::context& context, const void* data, type_id id, auto&& func)
 	{
 		if (!context.contains(id)) {
-			throw new std::invalid_argument("unregistered type id " + std::to_string(id));
+			grr::string temp_buffer;
+			temp_buffer.resize(10);
+			std::snprintf(temp_buffer.data(), 10, "%z", id);
+
+			throw new std::invalid_argument("unregistered type id " + temp_buffer);
 		}
 
 		const auto& type_info = context.obtain(id);
@@ -461,7 +465,11 @@ namespace grr
 				}
 
 				if (!context.contains(field_id)) {
-					throw new std::invalid_argument("unregistered type id " + std::to_string(field_id));
+					grr::string temp_buffer;
+					temp_buffer.resize(10);
+					std::snprintf(temp_buffer.data(), 10, "%z", id);
+
+					throw new std::invalid_argument("unregistered type id " + temp_buffer);
 				}
 
 				const auto& field_type = context.obtain(field_id);
@@ -600,7 +608,12 @@ namespace grr
 
 			pfr::for_each_field(val, [&val, &new_type](auto& field) {
 				std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
-				std::string field_name = "var" + std::to_string(offset);
+
+				grr::string temp_buffer;
+				temp_buffer.resize(14);
+				std::snprintf(temp_buffer.data(), 10, "%t", offset);
+
+				grr::string field_name = "var" + grr::string(temp_buffer);
 				new_type.emplace<decltype(field)>(field_name.data(), offset);
 				new_type.size += sizeof(field);
 			});
