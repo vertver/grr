@@ -447,7 +447,7 @@ namespace grr
 		if (!context.contains(id)) {
 			grr::string temp_buffer;
 			temp_buffer.resize(10);
-			std::snprintf(temp_buffer.data(), 10, "%z", id);
+			std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)id);
 
 			throw new std::invalid_argument("unregistered type id " + temp_buffer);
 		}
@@ -467,7 +467,7 @@ namespace grr
 				if (!context.contains(field_id)) {
 					grr::string temp_buffer;
 					temp_buffer.resize(10);
-					std::snprintf(temp_buffer.data(), 10, "%z", id);
+					std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)id);
 
 					throw new std::invalid_argument("unregistered type id " + temp_buffer);
 				}
@@ -611,7 +611,8 @@ namespace grr
 
 				grr::string temp_buffer;
 				temp_buffer.resize(14);
-				std::snprintf(temp_buffer.data(), 10, "%t", offset);
+				std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)offset);
+
 
 				grr::string field_name = "var" + grr::string(temp_buffer);
 				new_type.emplace<decltype(field)>(field_name.data(), offset);
