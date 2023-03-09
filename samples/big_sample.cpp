@@ -11,10 +11,7 @@ struct my_struct
 int main()
 {
 	grr::context context = grr::make_context();
-	my_struct instance = {};
-	instance.a = 1;
-	instance.b = 2;
-	instance.s = "hello reflection";
+	const my_struct instance = { 1, 2, "hello reflection" };
 
 	grr::add_type<my_struct>(context);
 	grr::visit(context, instance, []<typename T>(const T& field, const char* name) {

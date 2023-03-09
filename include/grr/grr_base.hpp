@@ -383,66 +383,32 @@ namespace grr
 	//    }
 
 	template<typename T>
-	static constexpr void visit_static_once(const void* data, const char* name, type_id id, bool& called, auto&& func)
+	static constexpr void visit_static_once(auto data, const char* name, type_id id, bool& called, auto&& func)
 	{
 		// #TODO: poor optimized, need to rework this one
 		constexpr type_id current_id = grr::obtain_id<T>();
 		if (!called && current_id == id) {
-			func(*reinterpret_cast<const T*>(data), name);
+			if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
+				func(*reinterpret_cast<const T*>(data), name);
+			} else {
+				func(*reinterpret_cast<T*>(data), name);
+			}
+
 			called = true;
 		}
 	}
 
 	template<typename... Types>
-	static constexpr bool visit_static(const void* data, const char* name, type_id id, auto&& func)
+	static constexpr bool visit_static(auto data, const char* name, type_id id, auto&& func)
 	{
 		bool called = false;
 		(visit_static_once<Types>(data, name, id, called, func), ...);
 		return called;
 	}
 
-	template<std::size_t recursion_level = 0>
-	static constexpr void visit(const grr::context& context, const void* data, type_id id, std::error_code& err, auto&& func)
-	{
-		if (!context.contains(id)) {
-			err = make_error_code(errors::unregistered_id);
-			return;
-		}
-
-		const auto& type_info = context.obtain(id);
-		for (const auto& cfield : type_info.fields) {
-			if (err) {
-				return;
-			}
-
-			const void* field_ptr = static_cast<const char*>(data) + cfield.offset;
-			type_id field_id = cfield.id;
-
-			if constexpr (recursion_level > 0) {
-				visit<recursion_level - 1>(context, field_ptr, field_id);
-			} else {
-				if (visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, err, func)) {
-					continue;
-				}
-
-				if (err) {
-					return;
-				}
-
-				if (!context.contains(field_id)) {
-					err = make_error_code(errors::unregistered_id);
-					return;
-				}
-
-				const auto& field_type = context.obtain(field_id);
-				func(std::make_pair(field_type.size, std::make_pair(field_ptr, field_id)), cfield.second.name.data());
-			}
-		}
-	}
-
 #ifndef GRR_DISABLE_EXCEPTIONS
 	template<std::size_t recursion_level = 0>
-	static constexpr void visit(const grr::context& context, const void* data, type_id id, auto&& func)
+	static constexpr void visit(const grr::context& context, auto data, type_id id, auto&& func)
 	{
 		if (!context.contains(id)) {
 			grr::string temp_buffer;
@@ -454,7 +420,13 @@ namespace grr
 
 		const auto& type_info = context.obtain(id);
 		for (const auto& cfield : type_info.fields) {
-			const void* field_ptr = static_cast<const char*>(data) + cfield.offset;
+			auto field_ptr = data;
+			if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
+				field_ptr = static_cast<const char*>(data) + cfield.offset;
+			} else {
+				field_ptr = static_cast<char*>(data) + cfield.offset;
+			}		
+			
 			type_id field_id = cfield.id;
 
 			if constexpr (recursion_level > 0) {
@@ -477,12 +449,16 @@ namespace grr
 			}
 		}
 	}
-
+	
 	template<std::size_t recursion_levels = 0, typename T>
-	static constexpr void visit(const grr::context& context, const T& data, auto&& func)
+	static constexpr void visit(const grr::context& context, T& data, auto&& func)
 	{
 		constexpr type_id id = grr::obtain_id<T>();
-		grr::visit(context, reinterpret_cast<const void*>(&data), id, func);
+		if constexpr (std::is_const_v<T>) {
+			grr::visit(context, reinterpret_cast<const void*>(&data), id, func);
+		} else {
+			grr::visit(context, reinterpret_cast<void*>(&data), id, func);
+		}
 	}
 #endif
 
