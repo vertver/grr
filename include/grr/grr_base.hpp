@@ -568,7 +568,7 @@ namespace grr
 
 	inline
 	void
-	register_type(context& current_context, const type_declaration& type)
+	add_type(context& current_context, const type_declaration& type)
 	{
 		if (current_context.contains(type.id)) {
 			string type_name = "type already exists [";
@@ -609,7 +609,7 @@ namespace grr
 		}
 #endif
 
-		grr::register_type(current_context, new_type);
+		grr::add_type(current_context, new_type);
 	}
 
 	template<typename... Types>

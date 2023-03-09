@@ -20,8 +20,7 @@ int main()
 	grr::visit(context, instance, []<typename T>(const T& field, const char* name) {
 		if constexpr (std::is_integral_v<T>) {
 			std::cout << name << ": " << std::to_string(field) << std::endl;
-		}
-		else if constexpr (std::is_same_v<T, grr::string>) {
+		} else if constexpr (std::is_same_v<T, grr::string>) {
 			std::cout << name << ": " << field << std::endl;
 		} else {
 			std::cout << name << ": " << "unknown memory" << std::endl;
