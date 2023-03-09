@@ -119,11 +119,6 @@ namespace grr
 #define GRR_TYPES \
 	void*, \
 	char, \
-	unsigned char, \
-	short, \
-	unsigned short, \
-	int, \
-	unsigned int, \
 	std::int8_t, \
 	std::int16_t, \
 	std::int32_t, \
@@ -137,7 +132,7 @@ namespace grr
 	\
 	grr::ptr_pair, \
 	grr::const_ptr_pair, \
-	grr::type_id \
+	grr::string, grr::string_view \
 	GRR_USER_TYPES
 #endif
 
@@ -262,12 +257,57 @@ namespace grr
 
 	template<typename T>
 	constexpr
-	auto
-	type_name()
+	string_view
+	type_name(int unused /* hack for newer versions of MSVC */)
 	{
-		return GRR_TYPE_NAME;
+		(void)(unused);
+
+#if defined(__clang__)
+		constexpr auto prefix = grr::string_view{ "[T = " };
+		constexpr auto suffix = grr::string_view{ "]" };
+		constexpr auto function = grr::string_view{ __PRETTY_FUNCTION__ };
+#elif defined(__GNUC__)
+		constexpr auto prefix = grr::string_view{ "with T = " };
+		constexpr auto suffix = grr::string_view{ "]" };
+		constexpr auto function = grr::string_view{ __PRETTY_FUNCTION__ };
+#elif defined(_MSC_VER)
+		constexpr auto prefix = grr::string_view{ "type_name<" };
+		constexpr auto suffix = grr::string_view{ ">(int)" };
+		constexpr auto function = grr::string_view{ __FUNCSIG__ };
+#else
+# error Unsupported compiler
+#endif
+
+		constexpr auto start = function.find(prefix) + prefix.size();
+		constexpr auto end = function.rfind(suffix);
+
+		static_assert(start < end);
+		constexpr auto name = function.substr(start, (end - start));
+		return name;
 	}
 
+	template<typename T>
+	constexpr
+	string_view
+	type_name()
+	{
+		return grr::type_name<std::remove_cv_t<T>>(0);
+	}
+
+	template<typename T>
+	constexpr
+	T
+	binhash(const string_view& str)
+	{
+		T hash = T(5381);
+		for (const char& sym : str) {
+			hash *= 0x21;
+			hash += sym;
+		}
+
+		return hash;
+	}
+	
 	template<typename T>
 	constexpr
 	T
@@ -277,17 +317,15 @@ namespace grr
 	}
 
 	constexpr
-	inline
-	type_id
-	obtain_id(const string_view& name)
-	{
-		return binhash<type_id>(name.data());
-	}
-
-	constexpr
-	inline
 	type_id
 	obtain_id(const char* name)
+	{
+		return binhash<type_id>(name);
+	}	
+	
+	constexpr
+	type_id
+	obtain_id(const string_view& name)
 	{
 		return binhash<type_id>(name);
 	}
@@ -347,6 +385,7 @@ namespace grr
 	template<typename T>
 	static constexpr void visit_static_once(const void* data, const char* name, type_id id, bool& called, auto&& func)
 	{
+		// #TODO: poor optimized, need to rework this one
 		constexpr type_id current_id = grr::obtain_id<T>();
 		if (!called && current_id == id) {
 			func(*reinterpret_cast<const T*>(data), name);
@@ -435,16 +474,7 @@ namespace grr
 	static constexpr void visit(const grr::context& context, const T& data, auto&& func)
 	{
 		constexpr type_id id = grr::obtain_id<T>();
-		if (!context.contains(id)) {
-			throw new std::invalid_argument("unregistered type id " + std::to_string(id));
-		}
-
-		if constexpr (recursion_levels > 0) {
-
-		}
-		else {
-
-		}
+		grr::visit(context, reinterpret_cast<const void*>(&data), id, func);
 	}
 #endif
 
@@ -460,13 +490,13 @@ namespace grr
 		type_declaration(type_declaration&&) = default;
 
 		type_declaration(const context& in_context)
-			: current_context(&in_context), real_name(generate_type_name()), id(obtain_id(real_name.data())), size(0) {}
+			: current_context(&in_context), real_name(generate_type_name()), id(obtain_id(real_name)), size(0) {}
 
 		type_declaration(const context& in_context, const char* type_name)
-			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name.data())), size(0) {}
-
+			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name)), size(0) {}	
+		
 		type_declaration(const context& in_context, const string_view& type_name)
-			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name.data())), size(0) {}
+			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name)), size(0) {}
 
 		bool field_erase(const char* field_name)
 		{
@@ -513,7 +543,7 @@ namespace grr
 		template<typename T>
 		void emplace(const char* field_name, std::size_t offset)
 		{
-			constexpr type_id current_id = obtain_id<T>();
+			constexpr type_id current_id = obtain_id<std::remove_cv_t<T>>();
 			if (!grr::contains(*current_context, current_id)) {
 				throw new std::invalid_argument("unregistered type id");
 			}
@@ -541,7 +571,10 @@ namespace grr
 	register_type(context& current_context, const type_declaration& type)
 	{
 		if (current_context.contains(type.id)) {
-
+			string type_name = "type already exists [";
+			type_name += type.real_name;
+			type_name += "]";
+			throw new std::invalid_argument(type_name);
 		}
 
 		type_context tcontext;
@@ -561,7 +594,7 @@ namespace grr
 
 		type_declaration new_type = type_declaration(current_context, grr::type_name<T>());
 #ifdef GRR_PREDECLARE_FIELDS
-		if constexpr (std::is_class_v<CT> && !std::is_same_v<CT, grr::ptr_pair> && !std::is_same_v<CT, grr::const_ptr_pair>) {
+		if constexpr (std::is_class_v<CT> && pfr::is_implicitly_reflectable_v<CT, CT>) {
 			CT val = {};
 			static_assert(!visit_struct::traits::is_visitable<CT>::value);
 
