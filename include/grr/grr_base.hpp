@@ -241,6 +241,7 @@ namespace grr
 		}
 	};
 
+	// https://bitwizeshift.github.io/posts/2021/03/09/getting-an-unmangled-type-name-at-compile-time/
 	template<typename T>
 	constexpr
 	string_view
@@ -249,27 +250,23 @@ namespace grr
 		(void)(unused);
 
 #if defined(__clang__)
-		constexpr auto prefix = grr::string_view{ "[T = " };
-		constexpr auto suffix = grr::string_view{ "]" };
-		constexpr auto function = grr::string_view{ __PRETTY_FUNCTION__ };
+		constexpr grr::string_view prefix = "[T = ";
+		constexpr grr::string_view suffix = "]";
+		constexpr grr::string_view function = __PRETTY_FUNCTION__ ;
 #elif defined(__GNUC__)
-		constexpr auto prefix = grr::string_view{ "with T = " };
-		constexpr auto suffix = grr::string_view{ "]" };
-		constexpr auto function = grr::string_view{ __PRETTY_FUNCTION__ };
+		constexpr grr::string_view prefix = "with T = ";
+		constexpr grr::string_view suffix = "]";
+		constexpr grr::string_view function =__PRETTY_FUNCTION__;
 #elif defined(_MSC_VER)
-		constexpr auto prefix = grr::string_view{ "type_name<" };
-		constexpr auto suffix = grr::string_view{ ">(int)" };
-		constexpr auto function = grr::string_view{ __FUNCSIG__ };
-#else
-# error Unsupported compiler
+		constexpr grr::string_view prefix = "type_name<";
+		constexpr grr::string_view suffix = ">(int)";
+		constexpr grr::string_view function = __FUNCSIG__;
 #endif
-
-		constexpr auto start = function.find(prefix) + prefix.size();
-		constexpr auto end = function.rfind(suffix);
+		constexpr std::size_t start = function.find(prefix) + prefix.size();
+		constexpr std::size_t end = function.rfind(suffix);
 
 		static_assert(start < end);
-		constexpr auto name = function.substr(start, (end - start));
-		return name;
+		return function.substr(start, (end - start));
 	}
 
 	template<typename T>
