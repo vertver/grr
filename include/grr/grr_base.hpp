@@ -119,6 +119,7 @@ namespace grr
 #define GRR_TYPES \
 	void*, \
 	char, \
+	char*, \
 	std::int8_t, \
 	std::int16_t, \
 	std::int32_t, \
@@ -127,14 +128,27 @@ namespace grr
 	std::uint16_t, \
 	std::uint32_t, \
 	std::uint64_t, \
+	std::int8_t*, \
+	std::int16_t*, \
+	std::int32_t*, \
+	std::int64_t*, \
+	std::uint8_t*, \
+	std::uint16_t*, \
+	std::uint32_t*, \
+	std::uint64_t*, \
 	float, \
 	double, \
-	\
-	char*, \
+	float*, \
+	double*, \
 	\
 	grr::ptr_pair, \
+	grr::ptr_pair*, \
 	grr::const_ptr_pair, \
-	grr::string, grr::string_view \
+	grr::const_ptr_pair*, \
+	grr::string, \
+	grr::string*, \
+	grr::string_view, \
+	grr::string_view* \
 	GRR_USER_TYPES
 #endif
 	struct field

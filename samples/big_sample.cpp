@@ -21,7 +21,7 @@ int main()
 		if (!type.display_name.compare(type.real_name)) {
 			std::cout << "Type \"" << type.display_name << "\" id " << id << std::endl;
 		} else {
-			std::cout << "Type \"" << type.display_name << "\" (" << type.real_name << ") " << " id " << id << std::endl;
+			std::cout << "Type \"" << type.display_name << "\" (" << type.real_name << ") id " << id << std::endl;
 		}
 	}
 	std::cout << std::endl;
