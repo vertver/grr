@@ -250,17 +250,17 @@ namespace grr
 		(void)(unused);
 
 #if defined(__clang__)
-		constexpr grr::string_view prefix = "[T = ";
-		constexpr grr::string_view suffix = "]";
-		constexpr grr::string_view function = __PRETTY_FUNCTION__ ;
+		constexpr string_view prefix = "[T = ";
+		constexpr string_view suffix = "]";
+		constexpr string_view function = __PRETTY_FUNCTION__ ;
 #elif defined(__GNUC__)
-		constexpr grr::string_view prefix = "with T = ";
-		constexpr grr::string_view suffix = "]";
-		constexpr grr::string_view function =__PRETTY_FUNCTION__;
+		constexpr string_view prefix = "with T = ";
+		constexpr string_view suffix = "]";
+		constexpr string_view function =__PRETTY_FUNCTION__;
 #elif defined(_MSC_VER)
-		constexpr grr::string_view prefix = "type_name<";
-		constexpr grr::string_view suffix = ">(int)";
-		constexpr grr::string_view function = __FUNCSIG__;
+		constexpr string_view prefix = "type_name<";
+		constexpr string_view suffix = ">(int)";
+		constexpr string_view function = __FUNCSIG__;
 #endif
 		constexpr std::size_t start = function.find(prefix) + prefix.size();
 		constexpr std::size_t end = function.rfind(suffix);
@@ -383,11 +383,7 @@ namespace grr
 	static constexpr void visit(const grr::context& context, auto data, type_id id, auto&& func)
 	{
 		if (!context.contains(id)) {
-			grr::string temp_buffer;
-			temp_buffer.resize(10);
-			std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)id);
-
-			throw new std::invalid_argument("unregistered type id " + temp_buffer);
+			throw new std::invalid_argument("unregistered type id");
 		}
 
 		const auto& type_info = context.obtain(id);
@@ -409,11 +405,7 @@ namespace grr
 				}
 
 				if (!context.contains(field_id)) {
-					grr::string temp_buffer;
-					temp_buffer.resize(10);
-					std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)id);
-
-					throw new std::invalid_argument("unregistered type id " + temp_buffer);
+					throw new std::invalid_argument("unregistered type id");
 				}
 
 				const auto& field_type = context.obtain(field_id);
