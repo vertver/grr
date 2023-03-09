@@ -15,9 +15,14 @@ int main()
 
 	grr::context context = grr::make_context();
 	grr::add_type<my_struct>(context);
+	grr::rename<my_struct>(context, "SUPER PUPER STRUCTURE");
 
 	for (const auto& [id, type] : context) {
-		std::cout << "Type \"" << type.display_name << "\" id " << id << std::endl;
+		if (!type.display_name.compare(type.real_name)) {
+			std::cout << "Type \"" << type.display_name << "\" id " << id << std::endl;
+		} else {
+			std::cout << "Type \"" << type.display_name << "\" (" << type.real_name << ") " << " id " << id << std::endl;
+		}
 	}
 	std::cout << std::endl;
 

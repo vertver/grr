@@ -205,6 +205,28 @@ namespace grr
 			return storage.end();
 		}
 
+		void rename(type_id id, const char* new_name)
+		{
+			const auto& it = storage.find(id);
+			if (it == storage.end()) {
+				// #TODO: error handling here
+				return;
+			}
+
+			it->second.display_name = new_name;
+		}
+
+		void rename(type_id id, const string_view& new_name)
+		{
+			const auto& it = storage.find(id);
+			if (it == storage.end()) {
+				// #TODO: error handling here
+				return;
+			}
+
+			it->second.display_name = string(new_name.begin(), new_name.end());
+		}
+
 		void add(type_id id, const type_context& type)
 		{
 			storage.emplace(std::make_pair(id, type));
@@ -291,6 +313,30 @@ namespace grr
 	inline bool contains(const context& current_context, type_id id)
 	{
 		return current_context.contains(id);
+	}
+
+	inline void rename(context& current_context, type_id id, const char* new_name)
+	{
+		current_context.rename(id, new_name);
+	}
+	
+	inline void rename(context& current_context, type_id id, const string_view& new_name)
+	{
+		current_context.rename(id, new_name);
+	}
+
+	template<typename T>
+	constexpr void rename(context& current_context, const string_view& new_name)
+	{
+		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
+		current_context.rename(obtain_id<CT>(), new_name);
+	}
+
+	template<typename T>
+	constexpr void rename(context& current_context, const char* new_name)
+	{
+		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
+		current_context.rename(obtain_id<CT>(), new_name);
 	}
 
 	template<typename T>
