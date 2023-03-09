@@ -241,20 +241,6 @@ namespace grr
 		}
 	};
 
-	constexpr
-	auto
-	generate_type_name()
-	{
-		constexpr const char* alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-		std::string type_name;
-		type_name.reserve(16);
-		for (int i = 0; i < 16; ++i) {
-			type_name += alphanum[rand() % (64 - 1)];
-		}
-
-		return type_name;
-	}
-
 	template<typename T>
 	constexpr
 	string_view
@@ -371,17 +357,6 @@ namespace grr
 		return current_context.size(obtain_id<CT>());
 	}
 
-	//    grr::visit(context, data, id, []<typename T>(const T& field, const char* name) {
-	//        if constexpr (std::is_same_v<std::remove_cv<T>, void*>>) {
-	//            return;
-	//        } else if constexpr (std::is_same_v<std::remove_cv<T>, grr::ptr_pair>>) {
-	//            std::cout << "raw data (size: " << field.left << ")";
-	//            return;
-	//        }
-	//        
-	//        std::cout << grr::stringify(field);
-	//    }
-
 	template<typename T>
 	static constexpr void visit_static_once(auto data, const char* name, type_id id, bool& called, auto&& func)
 	{
@@ -472,9 +447,6 @@ namespace grr
 
 		type_declaration(type_declaration&) = delete;
 		type_declaration(type_declaration&&) = default;
-
-		type_declaration(const context& in_context)
-			: current_context(&in_context), real_name(generate_type_name()), id(obtain_id(real_name)), size(0) {}
 
 		type_declaration(const context& in_context, const char* type_name)
 			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name)), size(0) {}	
@@ -588,7 +560,6 @@ namespace grr
 				grr::string temp_buffer;
 				temp_buffer.resize(14);
 				std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)offset);
-
 
 				grr::string field_name = "var" + grr::string(temp_buffer);
 				new_type.emplace<decltype(field)>(field_name.data(), offset);
