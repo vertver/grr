@@ -434,14 +434,13 @@ namespace grr
 		const auto& type_info = context.obtain(id);
 		for (const auto& cfield : type_info.fields) {
 			auto field_ptr = data;
+			const type_id field_id = cfield.id;
 			if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
 				field_ptr = static_cast<const char*>(data) + cfield.offset;
 			} else {
 				field_ptr = static_cast<char*>(data) + cfield.offset;
 			}		
 			
-			type_id field_id = cfield.id;
-
 			if constexpr (recursion_level > 0) {
 				visit<recursion_level - 1>(context, field_ptr, field_id);
 			} else {
@@ -479,6 +478,7 @@ namespace grr
 		vector<field> fields;
 
 		type_declaration(type_declaration&) = delete;
+		type_declaration(const type_declaration&) = delete;
 		type_declaration(type_declaration&&) = default;
 
 		type_declaration(const context& in_context, const char* type_name)
@@ -492,7 +492,7 @@ namespace grr
 			const std::size_t name_size = std::strlen(field_name);
 			for (auto it = fields.begin(); it != fields.end(); it++) {
 				const auto& field_elem = *it;
-				std::size_t field_name_size = std::strlen(field_elem.name.data());
+				const std::size_t field_name_size = std::strlen(field_elem.name.data());
 				if (name_size != field_name_size) {
 					continue;
 				}
@@ -558,18 +558,13 @@ namespace grr
 	inline void add_type(context& current_context, const type_declaration& type)
 	{
 		if (current_context.contains(type.id)) {
-			string type_name = "type already exists [";
-			type_name += type.real_name;
-			type_name += "]";
-			throw new std::invalid_argument(type_name);
+			throw new std::invalid_argument("type already exists");
 		}
 
-		type_context tcontext;
-		tcontext.real_name = type.real_name;
-		tcontext.display_name = type.real_name;
-		tcontext.fields = type.fields;
-		tcontext.size = type.size;
-		current_context.add(type.id, std::move(tcontext));
+		current_context.add(
+			type.id,
+			std::move(type_context{ type.size, type.real_name, type.real_name, type.fields })
+		);
 	}
 
 	template<typename T> 
@@ -584,13 +579,13 @@ namespace grr
 			static_assert(!visit_struct::traits::is_visitable<CT>::value);
 
 			pfr::for_each_field(val, [&val, &new_type](auto& field) {
-				std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
+				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
 
 				grr::string temp_buffer;
 				temp_buffer.resize(14);
 				std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)offset);
 
-				grr::string field_name = "var" + grr::string(temp_buffer);
+				const grr::string field_name = "var" + grr::string(temp_buffer);
 				new_type.emplace<decltype(field)>(field_name.data(), offset);
 				new_type.size += sizeof(field);
 			});
