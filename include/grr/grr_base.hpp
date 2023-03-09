@@ -472,7 +472,7 @@ namespace grr
 		template<typename T>
 		void emplace(const char* field_name, std::size_t offset)
 		{
-			constexpr type_id current_id = obtain_id<std::remove_cv_t<T>>();
+			constexpr type_id current_id = obtain_id<T>();
 			if (!grr::contains(*current_context, current_id)) {
 				throw new std::invalid_argument("unregistered type id");
 			}
