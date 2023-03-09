@@ -127,6 +127,8 @@ namespace grr
 	std::uint16_t, \
 	std::uint32_t, \
 	std::uint64_t, \
+	float, \
+	double, \
 	\
 	char*, \
 	\
@@ -135,42 +137,6 @@ namespace grr
 	grr::string, grr::string_view \
 	GRR_USER_TYPES
 #endif
-
-	enum class errors : int
-	{
-		invalid_argument,
-		unregistered_id,
-		out_of_range
-	};
-
-	struct error_category : public std::error_category
-	{
-		std::string message(int c) const
-		{
-			static const char* err_msg[] =
-			{
-				"Invalid argument",
-				"Out of range"
-			};
-
-			return err_msg[c];
-		}
-
-		const char* name() const noexcept { return "GRR Error code"; }
-		const static error_category& get()
-		{
-			const static error_category category_const;
-			return category_const;
-		}
-	};
-
-	inline
-	std::error_code
-	make_error_code(errors e)
-	{
-		return std::error_code(static_cast<int>(e), error_category::get());
-	}
-
 	struct field
 	{
 		field(const char* new_name, type_id new_id, std::size_t new_offset)
@@ -192,7 +158,6 @@ namespace grr
 
 	struct type_context
 	{
-		type_id id;
 		std::size_t size;
 		string display_name;
 		string real_name;
@@ -230,33 +195,41 @@ namespace grr
 			return storage.at(id);
 		}
 
-		void add(const type_context& type)
+		storage_map::const_iterator begin() const
 		{
-			storage.emplace(std::make_pair(type.id, type));
+			return storage.begin();
+		}
+		
+		storage_map::const_iterator end() const
+		{
+			return storage.end();
 		}
 
-		void add(type_context&& type)
+		void add(type_id id, const type_context& type)
 		{
-			storage.emplace(std::make_pair(type.id, type));
+			storage.emplace(std::make_pair(id, type));
+		}
+
+		void add(type_id id, type_context&& type)
+		{
+			storage.emplace(std::make_pair(id, type));
 		}
 	};
 
 	// https://bitwizeshift.github.io/posts/2021/03/09/getting-an-unmangled-type-name-at-compile-time/
 	template<typename T>
-	constexpr
-	string_view
-	type_name(int unused /* hack for newer versions of MSVC */)
+	constexpr string_view type_name(int unused /* hack for newer versions of MSVC */)
 	{
 		(void)(unused);
 
 #if defined(__clang__)
 		constexpr string_view prefix = "[T = ";
 		constexpr string_view suffix = "]";
-		constexpr string_view function = __PRETTY_FUNCTION__ ;
+		constexpr string_view function = __PRETTY_FUNCTION__;
 #elif defined(__GNUC__)
 		constexpr string_view prefix = "with T = ";
 		constexpr string_view suffix = "]";
-		constexpr string_view function =__PRETTY_FUNCTION__;
+		constexpr string_view function = __PRETTY_FUNCTION__;
 #elif defined(_MSC_VER)
 		constexpr string_view prefix = "type_name<";
 		constexpr string_view suffix = ">(int)";
@@ -270,17 +243,13 @@ namespace grr
 	}
 
 	template<typename T>
-	constexpr
-	string_view
-	type_name()
+	constexpr string_view type_name()
 	{
 		return grr::type_name<std::remove_cv_t<T>>(0);
 	}
 
 	template<typename T>
-	constexpr
-	T
-	binhash(const string_view& str)
+	constexpr T binhash(const string_view& str)
 	{
 		T hash = T(5381);
 		for (const char& sym : str) {
@@ -290,68 +259,85 @@ namespace grr
 
 		return hash;
 	}
-	
+
 	template<typename T>
-	constexpr
-	T
-	binhash(const char* str)
+	constexpr T binhash(const char* str)
 	{
 		return *str != '\0' ? static_cast<unsigned int>(*str) + 33 * binhash<T>(str + 1) : 5381;
 	}
 
-	constexpr
-	type_id
-	obtain_id(const char* name)
+	constexpr type_id obtain_id(const char* name)
 	{
 		return binhash<type_id>(name);
 	}	
 	
-	constexpr
-	type_id
-	obtain_id(const string_view& name)
+	constexpr type_id obtain_id(const string_view& name)
 	{
 		return binhash<type_id>(name);
 	}
 
 	template<typename T>
-	constexpr
-	type_id
-	obtain_id()
+	constexpr type_id obtain_id()
 	{
 		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
 		return obtain_id(type_name<CT>());
 	}
 
-	inline
-	std::size_t
-	size(const context& current_context, type_id id)
+	inline std::size_t size(const context& current_context, type_id id)
 	{
 		return current_context.size(id);
 	}
 
-	inline
-	bool
-	contains(const context& current_context, type_id id)
+	inline bool contains(const context& current_context, type_id id)
 	{
 		return current_context.contains(id);
 	}
 
 	template<typename T>
-	constexpr
-	bool
-	contains(const context& current_context)
+	constexpr bool contains(const context& current_context)
 	{
 		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
 		return current_context.contains(obtain_id<CT>());
 	}
 
 	template<typename T>
-	constexpr
-	bool
-	size(const context& current_context)
+	constexpr bool size(const context& current_context)
 	{
 		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
 		return current_context.size(obtain_id<CT>());
+	}
+
+	enum class errors : int
+	{
+		invalid_argument,
+		unregistered_id,
+		out_of_range
+	};
+
+	struct error_category : public std::error_category
+	{
+		std::string message(int c) const
+		{
+			static const char* err_msg[] =
+			{
+				"Invalid argument",
+				"Out of range"
+			};
+
+			return err_msg[c];
+		}
+
+		const char* name() const noexcept { return "GRR Error code"; }
+		const static error_category& get()
+		{
+			const static error_category category_const;
+			return category_const;
+		}
+	};
+
+	inline std::error_code make_error_code(errors e)
+	{
+		return std::error_code(static_cast<int>(e), error_category::get());
 	}
 
 	template<typename T>
@@ -378,7 +364,6 @@ namespace grr
 		return called;
 	}
 
-#ifndef GRR_DISABLE_EXCEPTIONS
 	template<std::size_t recursion_level = 0>
 	static constexpr void visit(const grr::context& context, auto data, type_id id, auto&& func)
 	{
@@ -416,7 +401,7 @@ namespace grr
 	
 	template<std::size_t recursion_levels = 0, typename T>
 	static constexpr void visit(const grr::context& context, T& data, auto&& func)
-	{
+{
 		constexpr type_id id = grr::obtain_id<T>();
 		if constexpr (std::is_const_v<T>) {
 			grr::visit(context, reinterpret_cast<const void*>(&data), id, func);
@@ -424,7 +409,6 @@ namespace grr
 			grr::visit(context, reinterpret_cast<void*>(&data), id, func);
 		}
 	}
-#endif
 
 	struct type_declaration
 	{
@@ -511,9 +495,7 @@ namespace grr
 		}
 	};
 
-	inline
-	void
-	add_type(context& current_context, const type_declaration& type)
+	inline void add_type(context& current_context, const type_declaration& type)
 	{
 		if (current_context.contains(type.id)) {
 			string type_name = "type already exists [";
@@ -523,17 +505,15 @@ namespace grr
 		}
 
 		type_context tcontext;
-		tcontext.id = type.id;
 		tcontext.real_name = type.real_name;
 		tcontext.display_name = type.real_name;
 		tcontext.fields = type.fields;
 		tcontext.size = type.size;
-		current_context.add(std::move(tcontext));
+		current_context.add(type.id, std::move(tcontext));
 	}
 
-	template<typename T>
-	void
-	add_type(context& current_context)
+	template<typename T> 
+	void add_type(context& current_context)
 	{
 		using CT = std::remove_cv_t<T>;
 
@@ -563,14 +543,12 @@ namespace grr
 	}
 
 	template<typename... Types>
-	void
-	add_types(context& current_context)
+	void add_types(context& current_context)
 	{
 		(add_type<Types>(current_context), ...);
 	}
 
-	context
-	make_context()
+	inline context make_context()
 	{
 		context out_context;
 		add_types<GRR_TYPES>(out_context);

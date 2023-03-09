@@ -16,6 +16,11 @@ int main()
 	grr::context context = grr::make_context();
 	grr::add_type<my_struct>(context);
 
+	for (const auto& [id, type] : context) {
+		std::cout << "Type \"" << type.display_name << "\" id " << id << std::endl;
+	}
+	std::cout << std::endl;
+
 	grr::visit(context, instance, []<typename T>(const T& field, const char* name) {
 		if constexpr (std::is_integral_v<T>) {
 			std::cout << name << ": " << std::to_string(field) << std::endl;
