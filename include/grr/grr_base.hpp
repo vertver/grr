@@ -151,6 +151,7 @@ namespace grr
 	grr::string_view* \
 	GRR_USER_TYPES
 #endif
+
 	struct field
 	{
 		field(const char* new_name, type_id new_id, std::size_t new_offset)
@@ -185,6 +186,11 @@ namespace grr
 		hash_map<type_id, type_context> storage;
 
 	public:
+		const type_context& at(type_id id) const
+		{
+			return storage.at(id);
+		}
+
 		bool contains(type_id id) const
 		{
 #ifdef GRR_CXX20
@@ -282,6 +288,15 @@ namespace grr
 	constexpr string_view type_name()
 	{
 		return grr::type_name<std::remove_cv_t<T>>(0);
+	}
+
+	const char* type_name(const context& current_context, type_id id)
+	{
+		if (!current_context.contains(id)) {
+			return "";
+		}
+
+		return current_context.at(id).real_name.c_str();
 	}
 
 	template<typename T>
@@ -579,14 +594,15 @@ namespace grr
 			static_assert(!visit_struct::traits::is_visitable<CT>::value);
 
 			pfr::for_each_field(val, [&val, &new_type](auto& field) {
-				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
+				using FCT = std::remove_cv_t<decltype(field)>;
 
+				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
 				grr::string temp_buffer;
 				temp_buffer.resize(14);
 				std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)offset);
 
 				const grr::string field_name = "var" + grr::string(temp_buffer);
-				new_type.emplace<decltype(field)>(field_name.data(), offset);
+				new_type.emplace<FCT>(field_name.data(), offset);
 				new_type.size += sizeof(field);
 			});
 		} else {
