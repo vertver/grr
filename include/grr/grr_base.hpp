@@ -165,8 +165,8 @@ namespace grr
 	template<typename T>
 	constexpr type_id obtain_id()
 	{
-		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
-		return obtain_id(type_name<CT>());
+		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
+		return obtain_id(type_name<ClearType>());
 	}
 
 	inline std::size_t size(const context& current_context, type_id id)
@@ -202,29 +202,29 @@ namespace grr
 	template<typename T>
 	constexpr void rename(context& current_context, const string_view& new_name)
 	{
-		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
-		current_context.rename(obtain_id<CT>(), new_name);
+		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
+		current_context.rename(obtain_id<ClearType>(), new_name);
 	}
 	 
 	template<typename T>
 	constexpr void rename(context& current_context, const char* new_name)
 	{
-		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
-		current_context.rename(obtain_id<CT>(), new_name);
+		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
+		current_context.rename(obtain_id<ClearType>(), new_name);
 	}
 
 	template<typename T>
 	constexpr bool contains(const context& current_context)
 	{
-		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
-		return current_context.contains(obtain_id<CT>());
+		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
+		return current_context.contains(obtain_id<ClearType>());
 	}
 
 	template<typename T>
 	constexpr bool size(const context& current_context)
 	{
-		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
-		return current_context.size(obtain_id<CT>());
+		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
+		return current_context.size(obtain_id<ClearType>());
 	}
 
 	enum class errors : int
@@ -431,34 +431,34 @@ namespace grr
 	template<typename T> 
 	void add_type(context& current_context)
 	{
-		using CT = std::remove_cv_t<T>;
+		using ClearType = std::remove_cv_t<T>;
 
 		type_declaration new_type = type_declaration(current_context, grr::type_name<T>());
 #ifdef GRR_PREDECLARE_FIELDS
-		if constexpr (visit_struct::traits::is_visitable<CT>::value) {
-			const CT val = {};
+		if constexpr (visit_struct::traits::is_visitable<ClearType>::value) {
+			const ClearType val = {};
 			visit_struct::for_each(val, [&val, &new_type](const char* name, const auto& field) {
-				using FCT = std::remove_cv_t<decltype(field)>;
+				using FieldClearType = std::remove_cv_t<decltype(field)>;
 
 				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
-				new_type.emplace<FCT>(name, offset);
-				new_type.size += sizeof(field);
+				new_type.emplace<FieldClearType>(name, offset);
+				new_type.size += sizeof(FieldClearType);
 				});
-		} else if constexpr (pfr::is_implicitly_reflectable_v<CT, CT>) {
-			const CT val = {};
+		} else if constexpr (pfr::is_implicitly_reflectable_v<ClearType, ClearType>) {
+			const ClearType val = {};
 			pfr::for_each_field(val, [&val, &new_type](const auto& field) {
-				using FCT = std::remove_cv_t<decltype(field)>;
+				using FieldClearType = std::remove_cv_t<decltype(field)>;
 
 				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
 				grr::string field_name;
 				field_name.resize(14);
 				std::snprintf(field_name.data(), 10, "var%u", (std::uint32_t)offset);
 
-				new_type.emplace<FCT>(field_name.data(), offset);
-				new_type.size += sizeof(field);
+				new_type.emplace<FieldClearType>(field_name.data(), offset);
+				new_type.size += sizeof(FieldClearType);
 			});
 		} else {
-			new_type.size = sizeof(CT);
+			new_type.size = sizeof(ClearType);
 		}
 #endif
 
