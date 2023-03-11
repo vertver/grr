@@ -1,4 +1,4 @@
-#include <grr/grr.hpp>
+#include "grr/grr.hpp"
 #include <iostream>
 
 using int_vector = std::vector<int>;
@@ -6,12 +6,20 @@ using int_vector = std::vector<int>;
 struct my_struct
 {
 	int a;
-	int c;
+	int c; 
 	std::uint64_t b;
 	grr::string s1;
 	grr::string s2;
 	int_vector memory;
 };
+
+struct another_reflected_struct
+{
+	int first_name;
+	int second_name;
+};
+
+VISITABLE_STRUCT(another_reflected_struct, first_name, second_name);
 
 class my_class
 {
@@ -62,6 +70,7 @@ int main()
 
 	char data[64] = {};
 	const my_struct instance = { 1, 0, 2, "hello reflection", "under reflection", { 1, 2, 3, 4 } };
+	const another_reflected_struct reflected_instance = { 1, 0 };
 	const my_class class_instance = my_class(1, 0);
 	const b_class b = b_class(false);
 
@@ -75,15 +84,16 @@ int main()
 
 	grr::add_type<int_vector>(context);
 	grr::add_type<my_struct>(context);
+	grr::add_type<another_reflected_struct>(context);
 	grr::add_type<b_class>(context);
 	grr::rename<my_struct>(context, "SUPER PUPER STRUCTURE");
 
 	for (const auto& [id, type] : context) {
 		const bool structured = !type.fields.empty();
-		if (!type.display_name.compare(type.real_name)) {
-			std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.display_name << "\" id " << id;
+		if (!type.name.compare(type.platform_name)) {
+			std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.name << "\" id " << id;
 		} else {
-			std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.display_name << "\" (" << type.real_name << ") id " << id;
+			std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.name << "\" (" << type.platform_name << ") id " << id;
 		}
 
 		std::cout << std::flush;
@@ -110,6 +120,8 @@ int main()
 	*my_string = "Test runtime string";
 
 	grr::visit(context, data, custom_type.id, visit_fields);
+	std::cout << std::endl;
+	grr::visit(context, reflected_instance, visit_fields);
 	std::cout << std::endl;
 	grr::visit(context, instance, visit_fields);
 

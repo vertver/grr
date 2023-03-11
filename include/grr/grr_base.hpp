@@ -5,153 +5,9 @@
 ***************************************************************************************/
 #ifndef GRR_BASE_HPP_INCLUDED
 #define GRR_BASE_HPP_INCLUDED
-#include <typeinfo>
-#include <system_error>
-#include <cstdint>
-#include <utility>
-
-#ifdef GRR_PREDECLARE_FIELDS
-#include <pfr.hpp>
-#include <visit_struct/visit_struct.hpp>
-#include <visit_struct/visit_struct_intrusive.hpp>
-#endif
-
-#if defined(GRR_TS_REFLECT) && !defined(__cpp_lib_reflection)
-#error Unsupported compile for C++ reflection feature
-#endif
-
-#ifndef GRR_USER_TYPES
-#define GRR_USER_TYPES
-#endif
-
-#if defined(_MSC_VER) && __cplusplus == 199711L
-#define GRR_CXX _MSVC_LANG 
-#else
-#define GRR_CXX __cplusplus 
-#endif
-
-#if GRR_CXX >= 202002L
-#define GRR_CXX20_SUPPORT 1
-#elif GRR_CXX < 201703L
-#error Incompatible version of C++
-#endif
-
-#ifndef GRR_CONSTEXPR
-#ifdef GRR_CXX20_SUPPORT
-#define GRR_CONSTEXPR constexpr
-#else
-#define GRR_CONSTEXPR
-#endif
-#endif
-
-#ifndef GRR_TYPE_NAME
-#ifdef _MSC_VER
-#define GRR_TYPE_NAME __FUNCSIG__
-#else
-#define GRR_TYPE_NAME __PRETTY_FUNCTION__
-#endif
-#endif
-
-#ifndef GRR_TYPE_ID
-#define GRR_TYPE_ID std::uint64_t
-#endif
-
-#ifndef GRR_INVALID_SIZE
-#define GRR_INVALID_SIZE static_cast<std::size_t>(-1)
-#endif
-
-#ifndef GRR_INVALID_ID
-#define GRR_INVALID_ID static_cast<GRR_TYPE_ID>(-1)
-#endif
-
-#ifndef GRR_DISABLE_EXCEPTIONS
-#include <exception>
-#endif
-
-#ifndef GRR_VECTOR
-#include <vector>
-#define GRR_VECTOR std::vector
-#endif
-
-#ifndef GRR_HASH_MAP
-#include <unordered_map>
-#define GRR_HASH_MAP std::unordered_map
-#endif
-
-#ifndef GRR_HASH_SET
-#include <unordered_set>
-#define GRR_HASH_SET std::unordered_set
-#endif
-
-#ifndef GRR_STRING
-#include <string>
-#define GRR_STRING std::string
-#endif
-
-#ifndef GRR_STRING_VIEW
-#include <string_view>
-#define GRR_STRING_VIEW std::string_view
-#endif
 
 namespace grr
 {
-	struct type_context;
-	class context;
-	class type_declaration;
-
-	template<typename T>
-	using vector = GRR_VECTOR<T>;
-
-	template<typename K, typename V>
-	using hash_map = GRR_HASH_MAP<K, V>;
-
-	template<typename K>
-	using hash_set = GRR_HASH_SET<K>;
-
-	using string = GRR_STRING;
-	using string_view = GRR_STRING_VIEW;
-	using type_id = GRR_TYPE_ID;
-
-	using ptr_pair = std::pair<std::uint64_t, std::pair<void*, type_id>>;
-	using const_ptr_pair = std::pair<std::uint64_t, std::pair<const void*, type_id>>;
-
-#ifndef GRR_TYPES
-#define GRR_TYPES \
-	void*, \
-	char, \
-	char*, \
-	std::int8_t, \
-	std::int16_t, \
-	std::int32_t, \
-	std::int64_t, \
-	std::uint8_t, \
-	std::uint16_t, \
-	std::uint32_t, \
-	std::uint64_t, \
-	std::int8_t*, \
-	std::int16_t*, \
-	std::int32_t*, \
-	std::int64_t*, \
-	std::uint8_t*, \
-	std::uint16_t*, \
-	std::uint32_t*, \
-	std::uint64_t*, \
-	float, \
-	double, \
-	float*, \
-	double*, \
-	\
-	grr::ptr_pair, \
-	grr::ptr_pair*, \
-	grr::const_ptr_pair, \
-	grr::const_ptr_pair*, \
-	grr::string, \
-	grr::string*, \
-	grr::string_view, \
-	grr::string_view* \
-	GRR_USER_TYPES
-#endif
-
 	struct field
 	{
 		field(const char* new_name, type_id new_id, std::size_t new_offset)
@@ -174,8 +30,8 @@ namespace grr
 	struct type_context
 	{
 		std::size_t size;
-		string display_name;
-		string real_name;
+		string name;
+		string platform_name;
 		vector<field> fields;
 	};
 
@@ -186,6 +42,11 @@ namespace grr
 		hash_map<type_id, type_context> storage;
 
 	public:
+		type_context& at(type_id id)
+		{
+			return storage.at(id);
+		}
+
 		const type_context& at(type_id id) const
 		{
 			return storage.at(id);
@@ -219,7 +80,7 @@ namespace grr
 		{
 			return storage.begin();
 		}
-		
+
 		storage_map::const_iterator end() const
 		{
 			return storage.end();
@@ -233,7 +94,7 @@ namespace grr
 				return;
 			}
 
-			it->second.display_name = new_name;
+			it->second.name = new_name;
 		}
 
 		void rename(type_id id, const string_view& new_name)
@@ -244,7 +105,7 @@ namespace grr
 				return;
 			}
 
-			it->second.display_name = string(new_name.begin(), new_name.end());
+			it->second.name = string(new_name.begin(), new_name.end());
 		}
 
 		void add(type_id id, const type_context& type)
@@ -258,36 +119,10 @@ namespace grr
 		}
 	};
 
-	// https://bitwizeshift.github.io/posts/2021/03/09/getting-an-unmangled-type-name-at-compile-time/
-	template<typename T>
-	constexpr string_view type_name(int unused /* hack for newer versions of MSVC */)
-	{
-		(void)(unused);
-
-#if defined(__clang__)
-		constexpr string_view prefix = "[T = ";
-		constexpr string_view suffix = "]";
-		constexpr string_view function = __PRETTY_FUNCTION__;
-#elif defined(__GNUC__)
-		constexpr string_view prefix = "with T = ";
-		constexpr string_view suffix = "]";
-		constexpr string_view function = __PRETTY_FUNCTION__;
-#elif defined(_MSC_VER)
-		constexpr string_view prefix = "type_name<";
-		constexpr string_view suffix = ">(int)";
-		constexpr string_view function = __FUNCSIG__;
-#endif
-		constexpr std::size_t start = function.find(prefix) + prefix.size();
-		constexpr std::size_t end = function.rfind(suffix);
-
-		static_assert(start < end);
-		return function.substr(start, (end - start));
-	}
-
 	template<typename T>
 	constexpr string_view type_name()
 	{
-		return grr::type_name<std::remove_cv_t<T>>(0);
+		return grr::detail::compiler_type_name<std::remove_cv_t<T>>(0);
 	}
 
 	const char* type_name(const context& current_context, type_id id)
@@ -296,7 +131,7 @@ namespace grr
 			return "";
 		}
 
-		return current_context.at(id).real_name.c_str();
+		return current_context.at(id).name.c_str();
 	}
 
 	template<typename T>
@@ -344,6 +179,16 @@ namespace grr
 		return current_context.contains(id);
 	}
 
+	inline void rename(context& current_context, type_id id, std::size_t field_idx, const char* new_name)
+	{
+		current_context.at(id).fields.at(field_idx).name = new_name;
+	}
+
+	inline void rename(context& current_context, type_id id, std::size_t field_idx, const string_view& new_name)
+	{
+		current_context.at(id).fields.at(field_idx).name = string(new_name.begin(), new_name.end());
+	}
+
 	inline void rename(context& current_context, type_id id, const char* new_name)
 	{
 		current_context.rename(id, new_name);
@@ -360,7 +205,7 @@ namespace grr
 		using CT = std::remove_reference_t<std::remove_cv_t<T>>;
 		current_context.rename(obtain_id<CT>(), new_name);
 	}
-
+	 
 	template<typename T>
 	constexpr void rename(context& current_context, const char* new_name)
 	{
@@ -415,28 +260,32 @@ namespace grr
 		return std::error_code(static_cast<int>(e), error_category::get());
 	}
 
-	template<typename T>
-	static constexpr void visit_static_once(auto data, const char* name, type_id id, bool& called, auto&& func)
+	namespace detail
 	{
-		// #TODO: poor optimized, need to rework this one
-		constexpr type_id current_id = grr::obtain_id<T>();
-		if (!called && current_id == id) {
-			if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
-				func(*reinterpret_cast<const T*>(data), name);
-			} else {
-				func(*reinterpret_cast<T*>(data), name);
+		template<typename T>
+		static constexpr void visit_static_once(auto data, const char* name, type_id id, bool& called, auto&& func)
+		{
+			// #TODO: poor optimized, need to rework this one
+			constexpr type_id current_id = grr::obtain_id<T>();
+			if (!called && current_id == id) {
+				if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
+					func(*reinterpret_cast<const T*>(data), name);
+				}
+				else {
+					func(*reinterpret_cast<T*>(data), name);
+				}
+
+				called = true;
 			}
-
-			called = true;
 		}
-	}
 
-	template<typename... Types>
-	static constexpr bool visit_static(auto data, const char* name, type_id id, auto&& func)
-	{
-		bool called = false;
-		(visit_static_once<Types>(data, name, id, called, func), ...);
-		return called;
+		template<typename... Types>
+		static constexpr bool visit_static(auto data, const char* name, type_id id, auto&& func)
+		{
+			bool called = false;
+			(visit_static_once<Types>(data, name, id, called, func), ...);
+			return called;
+		}
 	}
 
 	template<std::size_t recursion_level = 0>
@@ -459,7 +308,7 @@ namespace grr
 			if constexpr (recursion_level > 0) {
 				visit<recursion_level - 1>(context, field_ptr, field_id);
 			} else {
-				if (visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
+				if (detail::visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
 					continue;
 				}
 
@@ -488,7 +337,7 @@ namespace grr
 	{
 		const context* current_context;
 		std::size_t size;
-		string real_name;
+		string name;
 		type_id id;
 		vector<field> fields;
 
@@ -497,10 +346,10 @@ namespace grr
 		type_declaration(type_declaration&&) = default;
 
 		type_declaration(const context& in_context, const char* type_name)
-			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name)), size(0) {}	
+			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(0) {}
 		
 		type_declaration(const context& in_context, const string_view& type_name)
-			: current_context(&in_context), real_name(type_name), id(obtain_id(real_name)), size(0) {}
+			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(0) {}
 
 		bool field_erase(const char* field_name)
 		{
@@ -576,10 +425,7 @@ namespace grr
 			throw new std::invalid_argument("type already exists");
 		}
 
-		current_context.add(
-			type.id,
-			std::move(type_context{ type.size, type.real_name, type.real_name, type.fields })
-		);
+		current_context.add(type.id, std::move(type_context{ type.size, type.name, type.name, type.fields }));
 	}
 
 	template<typename T> 
@@ -589,10 +435,17 @@ namespace grr
 
 		type_declaration new_type = type_declaration(current_context, grr::type_name<T>());
 #ifdef GRR_PREDECLARE_FIELDS
-		if constexpr (std::is_class_v<CT> && pfr::is_implicitly_reflectable_v<CT, CT>) {
+		if constexpr (visit_struct::traits::is_visitable<CT>::value) {
 			CT val = {};
-			static_assert(!visit_struct::traits::is_visitable<CT>::value);
+			visit_struct::for_each(val, [&val, &new_type](const char* name, const auto& field) {
+				using FCT = std::remove_cv_t<decltype(field)>;
 
+				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
+				new_type.emplace<FCT>(name, offset);
+				new_type.size += sizeof(field);
+				});
+		} else if constexpr (pfr::is_implicitly_reflectable_v<CT, CT>) {
+			CT val = {};
 			pfr::for_each_field(val, [&val, &new_type](auto& field) {
 				using FCT = std::remove_cv_t<decltype(field)>;
 
@@ -613,16 +466,19 @@ namespace grr
 		grr::add_type(current_context, new_type);
 	}
 
-	template<typename... Types>
-	void add_types(context& current_context)
+	namespace detail
 	{
-		(add_type<Types>(current_context), ...);
+		template<typename... Types>
+		void add_types(context& current_context)
+		{
+			(grr::add_type<Types>(current_context), ...);
+		}
 	}
 
 	inline context make_context()
 	{
 		context out_context;
-		add_types<GRR_TYPES>(out_context);
+		detail::add_types<GRR_TYPES>(out_context);
 		return out_context;
 	}
 }
