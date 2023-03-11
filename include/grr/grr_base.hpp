@@ -436,7 +436,7 @@ namespace grr
 		type_declaration new_type = type_declaration(current_context, grr::type_name<T>());
 #ifdef GRR_PREDECLARE_FIELDS
 		if constexpr (visit_struct::traits::is_visitable<CT>::value) {
-			CT val = {};
+			const CT val = {};
 			visit_struct::for_each(val, [&val, &new_type](const char* name, const auto& field) {
 				using FCT = std::remove_cv_t<decltype(field)>;
 
@@ -445,16 +445,15 @@ namespace grr
 				new_type.size += sizeof(field);
 				});
 		} else if constexpr (pfr::is_implicitly_reflectable_v<CT, CT>) {
-			CT val = {};
-			pfr::for_each_field(val, [&val, &new_type](auto& field) {
+			const CT val = {};
+			pfr::for_each_field(val, [&val, &new_type](const auto& field) {
 				using FCT = std::remove_cv_t<decltype(field)>;
 
 				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
-				grr::string temp_buffer;
-				temp_buffer.resize(14);
-				std::snprintf(temp_buffer.data(), 10, "%u", (std::uint32_t)offset);
+				grr::string field_name;
+				field_name.resize(14);
+				std::snprintf(field_name.data(), 10, "var%u", (std::uint32_t)offset);
 
-				const grr::string field_name = "var" + grr::string(temp_buffer);
 				new_type.emplace<FCT>(field_name.data(), offset);
 				new_type.size += sizeof(field);
 			});
