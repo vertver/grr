@@ -59,7 +59,11 @@ namespace grr::detail
 		return name;
 	}
 
-	constexpr const char* plat_name = platform_name();
+	template <std::size_t...Idxs>
+	constexpr auto substring_as_array(std::string_view str, std::index_sequence<Idxs...>)
+	{
+		return std::array{ str[Idxs]..., '\n' };
+	}
 
 	// https://bitwizeshift.github.io/posts/2021/03/09/getting-an-unmangled-type-name-at-compile-time/
 	template<typename T>
@@ -84,7 +88,10 @@ namespace grr::detail
 		constexpr std::size_t end = function.rfind(suffix);
 
 		static_assert(start < end);
-		return function.substr(start, (end - start));
+		constexpr grr::string_view name = function.substr(start, (end - start));
+
+		return name;
+
 	}
 }
 #endif

@@ -53,36 +53,4 @@
 #endif
 #endif
 
-#ifndef GRR_TYPE_NAME
-#ifdef _MSC_VER
-#define GRR_TYPE_NAME __FUNCSIG__
-#else
-#define GRR_TYPE_NAME __PRETTY_FUNCTION__
-#endif
-#endif
-
-#ifndef GRR_PLATFORM_NAME
-#ifdef _WIN32
-#define GRR_PLATFORM_NAME "win32-";
-#elif __APPLE__ || __MACH__
-##define GRR_PLATFORM_NAME "macos-";
-#elif __linux__
-##define GRR_PLATFORM_NAME "linux-";
-#elif __FreeBSD__
-##define GRR_PLATFORM_NAME "freebsd-";
-#elif __unix || __unix__
-##define GRR_PLATFORM_NAME "unix-";
-#endif
-#endif
-
-#ifndef GRR_COMPILER_NAME
-#if defined(__clang__)
-#define GRR_COMPILER_NAME "clang";
-#elif defined(__GNUC__)
-#define GRR_COMPILER_NAME "gcc";
-#elif defined(_MSC_VER)
-#define GRR_COMPILER_NAME "msvc";
-#endif
-#endif
-
 #endif

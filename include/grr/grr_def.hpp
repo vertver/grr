@@ -47,4 +47,18 @@
 #define GRR_STRING_VIEW std::string_view
 #endif
 
+#ifdef _MSC_VER
+#ifndef GRR_WIDESTRING
+#include <string>
+#define GRR_WIDESTRING std::wstring
+#endif
+
+#ifndef GRR_WIDESTRING_VIEW
+#include <string_view>
+#define GRR_WIDESTRING_VIEW std::wstring_view
+#endif
+#endif
+#else
+#define GRR_WIDESTRING
+#define GRR_WIDESTRING_VIEW
 #endif

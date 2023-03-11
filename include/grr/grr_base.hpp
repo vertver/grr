@@ -380,6 +380,7 @@ namespace grr
 			return true;
 		}
 
+
 		template<typename T>
 		void emplace(const char* field_name)
 		{

@@ -55,7 +55,7 @@ int main()
 			std::cout << name << ": " << std::to_string(field) << std::endl;
 		} else if constexpr (std::is_same_v<T, grr::string>) {
 			std::cout << name << ": " << field << std::endl;
-		} else if constexpr (std::is_same_v<T, grr::const_ptr_pair>) {
+		} else if constexpr (grr::is_fallback_type_v<T>) {
 			constexpr grr::type_id vector_typeid = grr::obtain_id<int_vector>();
 			if (vector_typeid == field.second.second) {
 				const int_vector* my_vector = reinterpret_cast<const int_vector*>(field.second.first);
