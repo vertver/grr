@@ -8,6 +8,39 @@
 
 namespace grr
 {
+	enum class errors : int
+	{
+		invalid_argument,
+		unregistered_id,
+		out_of_range
+	};
+
+	struct error_category : public std::error_category
+	{
+		std::string message(int c) const
+		{
+			static const char* err_msg[] =
+			{
+				"Invalid argument",
+				"Out of range"
+			};
+
+			return err_msg[c];
+		}
+
+		const char* name() const noexcept { return "GRR Error code"; }
+		const static error_category& get()
+		{
+			const static error_category category_const;
+			return category_const;
+		}
+	};
+
+	inline std::error_code make_error_code(errors e)
+	{
+		return std::error_code(static_cast<int>(e), error_category::get());
+	}
+
 	struct field
 	{
 		field(const char* new_name, type_id new_id, std::size_t new_offset)
@@ -29,6 +62,7 @@ namespace grr
 
 	struct type_context
 	{
+		type_id base_type;
 		std::size_t size;
 		string name;
 		string platform_name;
@@ -122,7 +156,8 @@ namespace grr
 	template<typename T>
 	constexpr string_view type_name()
 	{
-		return grr::detail::compiler_type_name<std::remove_cv_t<T>>(0);
+		constexpr auto& value = grr::detail::temp_type_name_holder<T>::value;
+		return std::string_view(value.data(), value.size());
 	}
 
 	const char* type_name(const context& current_context, type_id id)
@@ -199,6 +234,29 @@ namespace grr
 		current_context.rename(id, new_name);
 	}
 
+	inline std::size_t offset(context& current_context, type_id id, std::size_t field_idx)
+	{
+		return current_context.at(id).fields.at(field_idx).offset;
+	}
+
+	inline type_id base_type(context& current_context, type_id id)
+	{
+		return current_context.at(id).base_type;
+	}
+
+	template<typename T>
+	constexpr type_id base_type()
+	{
+		return obtain_id<std::remove_pointer_t<std::remove_reference_t<std::remove_cv_t<T>>>>();
+	}
+
+	template<typename T>
+	constexpr void rename(context& current_context, std::size_t field_idx, const string_view& new_name)
+	{
+		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
+		current_context.at(obtain_id<ClearType>()).fields.at(field_idx).name = string(new_name.begin(), new_name.end());
+	}
+
 	template<typename T>
 	constexpr void rename(context& current_context, const string_view& new_name)
 	{
@@ -227,37 +285,11 @@ namespace grr
 		return current_context.size(obtain_id<ClearType>());
 	}
 
-	enum class errors : int
+	template<typename T>
+	constexpr std::size_t offset(context& current_context, std::size_t field_idx)
 	{
-		invalid_argument,
-		unregistered_id,
-		out_of_range
-	};
-
-	struct error_category : public std::error_category
-	{
-		std::string message(int c) const
-		{
-			static const char* err_msg[] =
-			{
-				"Invalid argument",
-				"Out of range"
-			};
-
-			return err_msg[c];
-		}
-
-		const char* name() const noexcept { return "GRR Error code"; }
-		const static error_category& get()
-		{
-			const static error_category category_const;
-			return category_const;
-		}
-	};
-
-	inline std::error_code make_error_code(errors e)
-	{
-		return std::error_code(static_cast<int>(e), error_category::get());
+		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
+		return current_context.at(obtain_id<ClearType>()).fields.at(field_idx).offset;
 	}
 
 	namespace detail
@@ -265,14 +297,28 @@ namespace grr
 		template<typename T>
 		static constexpr void visit_static_once(auto data, const char* name, type_id id, bool& called, auto&& func)
 		{
+			using ClearDataType = std::remove_pointer_t<decltype(data)>;
+
 			// #TODO: poor optimized, need to rework this one
-			constexpr type_id current_id = grr::obtain_id<T>();
-			if (!called && current_id == id) {
-				if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
-					func(*reinterpret_cast<const T*>(data), name);
+			if constexpr (!std::is_same_v<T, void>) {
+				constexpr type_id current_id = grr::obtain_id<T>();
+				if (!called && current_id == id) {
+					if constexpr (std::is_const_v<ClearDataType>) {
+						func(*reinterpret_cast<const T*>(data), name);
+					} else {
+						func(*reinterpret_cast<T*>(data), name);
+					}
+
+					called = true;
 				}
-				else {
-					func(*reinterpret_cast<T*>(data), name);
+			}
+			
+			constexpr type_id current_ptr_id = grr::obtain_id<T*>();
+			if (!called && current_ptr_id == id) {
+				if constexpr (std::is_const_v<ClearDataType>) {
+					func(*reinterpret_cast<const T**>(reinterpret_cast<size_t>(data)), name);
+				} else {
+					func(*reinterpret_cast<T**>(reinterpret_cast<size_t>(data)), name);
 				}
 
 				called = true;
@@ -336,11 +382,13 @@ namespace grr
 	struct type_declaration
 	{
 		const context* current_context;
+		bool aggregate = false;
 		std::size_t size;
 		string name;
 		type_id id;
 		vector<field> fields;
 
+		type_declaration() = delete;
 		type_declaration(type_declaration&) = delete;
 		type_declaration(const type_declaration&) = delete;
 		type_declaration(type_declaration&&) = default;
@@ -349,7 +397,13 @@ namespace grr
 			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(0) {}
 		
 		type_declaration(const context& in_context, const string_view& type_name)
-			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(0) {}
+			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(0) {}	
+		
+		type_declaration(const context& in_context, const char* type_name, std::size_t new_size)
+			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(new_size) {}
+		
+		type_declaration(const context& in_context, const string_view& type_name, std::size_t new_size)
+			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(new_size) {}
 
 		bool field_erase(const char* field_name)
 		{
@@ -380,7 +434,6 @@ namespace grr
 			return true;
 		}
 
-
 		template<typename T>
 		void emplace(const char* field_name)
 		{
@@ -389,8 +442,7 @@ namespace grr
 				throw new std::invalid_argument("unregistered type id");
 			}
 
-			const std::size_t type_size = fields.empty() ? 0 : grr::size(*current_context, fields.back().id);
-			const std::size_t offset = fields.empty() ? 0 : fields.back().offset + type_size;
+			const std::size_t offset = fields.empty() ? 0 : fields.back().offset + grr::size(*current_context, fields.back().id);
 			fields.emplace_back(std::move(field(field_name, current_id, offset)));
 		}
 
@@ -426,44 +478,83 @@ namespace grr
 			throw new std::invalid_argument("type already exists");
 		}
 
-		current_context.add(type.id, std::move(type_context{ type.size, type.name, type.name, type.fields }));
+		current_context.add(type.id, std::move(type_context{ type.id, type.size, type.name, type.name, type.fields }));
+	}
+
+	inline void add_type(context& current_context, const type_declaration& type, type_id base_type)
+	{
+		if (current_context.contains(type.id)) {
+			throw new std::invalid_argument("type already exists");
+		}
+
+		current_context.add(type.id, std::move(type_context{ base_type, type.size, type.name, type.name, type.fields }));
+	}
+
+	template<typename BaseType>
+	constexpr void add_type(context& current_context, const type_declaration& type)
+	{
+		if (current_context.contains(type.id)) {
+			throw new std::invalid_argument("type already exists");
+		}
+
+		current_context.add(type.id, std::move(type_context{ obtain_id<BaseType>(), type.size, type.name, type.name, type.fields }));
 	}
 
 	template<typename T> 
 	void add_type(context& current_context)
 	{
-		using ClearType = std::remove_cv_t<T>;
+		using ClearType = std::remove_pointer_t<std::remove_cv_t<T>>;
+		type_declaration new_type = { current_context, grr::type_name<ClearType>() };
+		constexpr bool is_aggregate = std::is_aggregate<ClearType>();
 
-		type_declaration new_type = type_declaration(current_context, grr::type_name<T>());
 #ifdef GRR_PREDECLARE_FIELDS
-		if constexpr (visit_struct::traits::is_visitable<ClearType>::value) {
-			const ClearType val = {};
-			visit_struct::for_each(val, [&val, &new_type](const char* name, const auto& field) {
-				using FieldClearType = std::remove_cv_t<decltype(field)>;
+		if constexpr (is_aggregate) {
+			constexpr bool is_visitable = visit_struct::traits::is_visitable<ClearType>::value;
+			constexpr bool is_reflectable = pfr::is_implicitly_reflectable_v<ClearType, ClearType>;
+			static_assert(is_visitable || is_reflectable, "GRR supports only aggregate types (such as PODs)");
 
-				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
-				new_type.emplace<FieldClearType>(name, offset);
-				new_type.size += sizeof(FieldClearType);
+			const ClearType val = {};
+			if constexpr (is_visitable) {
+				visit_struct::for_each(val, [&val, &new_type](const char* name, const auto& field) {
+					using FieldClearType = std::remove_reference_t<std::remove_const_t<decltype(field)>>;
+					const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
+					new_type.emplace<FieldClearType>(name, offset);
+					new_type.size += sizeof(FieldClearType);
 				});
-		} else if constexpr (pfr::is_implicitly_reflectable_v<ClearType, ClearType>) {
-			const ClearType val = {};
-			pfr::for_each_field(val, [&val, &new_type](const auto& field) {
-				using FieldClearType = std::remove_cv_t<decltype(field)>;
+			} else if constexpr (is_reflectable) {
+				pfr::for_each_field(val, [&val, &new_type](const auto& field) {
+					using FieldClearType = std::remove_reference_t<std::remove_const_t<decltype(field)>>;
+					const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
+					grr::string field_name;
+					field_name.resize(14);
+					std::snprintf(field_name.data(), 10, "var%u", (std::uint32_t)offset);
 
-				const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
-				grr::string field_name;
-				field_name.resize(14);
-				std::snprintf(field_name.data(), 10, "var%u", (std::uint32_t)offset);
-
-				new_type.emplace<FieldClearType>(field_name.data(), offset);
-				new_type.size += sizeof(FieldClearType);
-			});
+					new_type.emplace<FieldClearType>(field_name.data(), offset);
+					new_type.size += sizeof(FieldClearType);
+				});
+			}
 		} else {
-			new_type.size = sizeof(ClearType);
+			if constexpr (!std::is_same_v<ClearType, void>) {
+				new_type.size = sizeof(ClearType);
+			}
 		}
+#else
+		new_type.size = sizeof(ClearType);
 #endif
 
+		new_type.aggregate = is_aggregate;
 		grr::add_type(current_context, new_type);
+		if constexpr (!std::is_void_v<ClearType>) {
+			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType>(), sizeof(ClearType) });
+			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType>(), sizeof(ClearType) });
+			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType&>(), sizeof(ClearType) });
+			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType&>(), sizeof(ClearType) });
+			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType&>(), sizeof(ClearType) });
+		}
+
+		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType*>(), sizeof(ClearType*) });	
+		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType*>(), sizeof(ClearType*) });			
+		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType*>(), sizeof(ClearType*) });
 	}
 
 	namespace detail

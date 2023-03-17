@@ -62,12 +62,12 @@ namespace grr::detail
 	template <std::size_t...Idxs>
 	constexpr auto substring_as_array(std::string_view str, std::index_sequence<Idxs...>)
 	{
-		return std::array{ str[Idxs]..., '\n' };
+		return std::array{ str[Idxs]..., '\0' };
 	}
 
 	// https://bitwizeshift.github.io/posts/2021/03/09/getting-an-unmangled-type-name-at-compile-time/
 	template<typename T>
-	constexpr grr::string_view compiler_type_name(int unused /* hack for newer versions of MSVC */)
+	constexpr auto compiler_type_name(int unused /* hack for newer versions of MSVC */)
 	{
 		(void)(unused);
 
@@ -88,10 +88,20 @@ namespace grr::detail
 		constexpr std::size_t end = function.rfind(suffix);
 
 		static_assert(start < end);
-		constexpr grr::string_view name = function.substr(start, (end - start));
+		constexpr std::string_view name = function.substr(start, (end - start));
+		constexpr std::size_t bracket = name.find_first_of(';');
+		if constexpr (bracket != std::size_t(-1)) {
+			constexpr std::string_view extracted_name = function.substr(start, bracket);
+			return substring_as_array(extracted_name, std::make_index_sequence<extracted_name.size()>{});
+		}
 
-		return name;
-
+		return substring_as_array(name, std::make_index_sequence<name.size()>{});
 	}
+
+	template <typename T>
+	struct temp_type_name_holder 
+	{
+		static inline constexpr auto value = compiler_type_name<T>(0);
+	};
 }
 #endif

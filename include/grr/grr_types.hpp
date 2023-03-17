@@ -38,15 +38,10 @@ namespace grr
 #ifdef _MSC_VER
 #define GRR_MSVC_TYPES \
 	wchar_t, \
-	wchar_t*, \
 	__int32, \
-	__int32*, \
 	unsigned __int32, \
-	unsigned __int32*, \
 	grr::wstring, \
-	grr::wstring*, \
-	grr::wstring_view, \
-	grr::wstring_view*, 
+	grr::wstring_view, 
 #else
 #define GRR_MSVC_TYPES 
 #endif
@@ -70,41 +65,26 @@ namespace grr
 
 #ifndef GRR_TYPES
 #define GRR_TYPES \
-	void*, \
-	\
+	void, \
 	char, \
-	char*, \
 	short, \
-	short*, \
 	long, \
-	long*, \
 	long long, \
-	long long*, \
 	unsigned char, \
-	unsigned char*, \
 	unsigned short, \
-	unsigned short*, \
 	unsigned long, \
-	unsigned long*, \
 	unsigned long long, \
-	unsigned long long*, \
 	GRR_MSVC_TYPES \
 	GRR_CLANG_TYPES \
 	GRR_GCC_TYPES \
 	\
 	float, \
 	double, \
-	float*, \
-	double*, \
 	\
 	grr::ptr_pair, \
-	grr::ptr_pair*, \
 	grr::const_ptr_pair, \
-	grr::const_ptr_pair*, \
 	grr::string, \
-	grr::string*, \
-	grr::string_view, \
-	grr::string_view* \
+	grr::string_view \
 	GRR_USER_TYPES
 #endif
 

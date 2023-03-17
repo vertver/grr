@@ -12,4 +12,6 @@
 #include <grr/detail/name_parser.hpp>
 
 #include <grr/grr_base.hpp>
+
+#define GRR_REFLECT VISITABLE_STRUCT
 #endif

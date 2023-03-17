@@ -10,6 +10,7 @@
 #include <system_error>
 #include <cstdint>
 #include <utility>
+#include <array>
 
 #ifdef GRR_PREDECLARE_FIELDS
 #ifndef PFR_HPP

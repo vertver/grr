@@ -17,9 +17,11 @@ struct another_reflected_struct
 {
 	int first_name;
 	int second_name;
+	void* first_ptr;
+	void* second_ptr;
 };
 
-VISITABLE_STRUCT(another_reflected_struct, first_name, second_name);
+GRR_REFLECT(another_reflected_struct, first_name, second_name, first_ptr, second_ptr);
 
 class my_class
 {
@@ -48,14 +50,16 @@ public:
 	bool a() override { return dds; }
 };
 
-int main()
+void run_big_sample()
 {
-	auto visit_fields = []<typename T>(const T& field, const char* name) {
+	auto visit_fields = []<typename T>(const T & field, const char* name) {
 		if constexpr (std::is_integral_v<T>) {
 			std::cout << name << ": " << std::to_string(field) << std::endl;
-		} else if constexpr (std::is_same_v<T, grr::string>) {
+		}
+		else if constexpr (std::is_same_v<T, grr::string>) {
 			std::cout << name << ": " << field << std::endl;
-		} else if constexpr (grr::is_fallback_type_v<T>) {
+		}
+		else if constexpr (grr::is_fallback_type_v<T>) {
 			constexpr grr::type_id vector_typeid = grr::obtain_id<int_vector>();
 			if (vector_typeid == field.second.second) {
 				const int_vector* my_vector = reinterpret_cast<const int_vector*>(field.second.first);
@@ -70,7 +74,7 @@ int main()
 
 	char data[64] = {};
 	const my_struct instance = { 1, 0, 2, "hello reflection", "under reflection", { 1, 2, 3, 4 } };
-	const another_reflected_struct reflected_instance = { 1, 0 };
+	const another_reflected_struct reflected_instance = { 1, 0, nullptr, (void*)(size_t)-1 };
 	const my_class class_instance = my_class(1, 0);
 	const b_class b = b_class(false);
 
@@ -86,13 +90,13 @@ int main()
 	grr::add_type<my_struct>(context);
 	grr::add_type<another_reflected_struct>(context);
 	grr::add_type<b_class>(context);
-	grr::rename<my_struct>(context, "SUPER PUPER STRUCTURE");
 
 	for (const auto& [id, type] : context) {
 		const bool structured = !type.fields.empty();
 		if (!type.name.compare(type.platform_name)) {
 			std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.name << "\" id " << id;
-		} else {
+		}
+		else {
 			std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.name << "\" (" << type.platform_name << ") id " << id;
 		}
 
@@ -107,7 +111,7 @@ int main()
 
 	std::cout << std::endl;
 	std::uint64_t b_fields_count = 0;
-	grr::visit(context, b, [&b_fields_count]<typename T>(const T & field, const char* name) {
+	grr::visit(context, b, [&b_fields_count]<typename T>(const T& field, const char* name) {
 		std::cout << name << std::endl;
 		b_fields_count++;
 	});
@@ -123,7 +127,24 @@ int main()
 	std::cout << std::endl;
 	grr::visit(context, reflected_instance, visit_fields);
 	std::cout << std::endl;
+	std::cout << "Printing befory renaming...";
+	std::cout << std::endl;
 	grr::visit(context, instance, visit_fields);
+	std::cout << std::endl;
+	std::cout << "Printing after renaming...";
+	std::cout << std::endl;
+	grr::rename<my_struct>(context, "SUPER PUPER STRUCTURE");
+	grr::rename<my_struct>(context, 0, "a");
+	grr::rename<my_struct>(context, 1, "c");
+	grr::rename<my_struct>(context, 2, "b");
+	grr::rename<my_struct>(context, 3, "s1");
+	grr::rename<my_struct>(context, 4, "s2");
+	grr::rename<my_struct>(context, 5, "memory");
+	grr::visit(context, instance, visit_fields);
+}
 
+int main()
+{
+	run_big_sample();
 	return 0;
 }
