@@ -5,6 +5,7 @@
 ***************************************************************************************/
 #ifndef GRR_BASE_HPP_INCLUDED
 #define GRR_BASE_HPP_INCLUDED
+#include <grr/detail/name_parser.hpp>
 
 namespace grr
 {
@@ -156,8 +157,7 @@ namespace grr
 	template<typename T>
 	constexpr string_view type_name()
 	{
-		constexpr auto& value = grr::detail::temp_type_name_holder<T>::value;
-		return std::string_view(value.data(), value.size());
+		return grr::detail::compiler_type_name<T>(0);
 	}
 
 	const char* type_name(const context& current_context, type_id id)
@@ -516,21 +516,20 @@ namespace grr
 			const ClearType val = {};
 			if constexpr (is_visitable) {
 				visit_struct::for_each(val, [&val, &new_type](const char* name, const auto& field) {
-					using FieldClearType = std::remove_reference_t<std::remove_const_t<decltype(field)>>;
-					const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
-					new_type.emplace<FieldClearType>(name, offset);
-					new_type.size += sizeof(FieldClearType);
+					const std::ptrdiff_t offset = reinterpret_cast<std::ptrdiff_t>(&field) - reinterpret_cast<std::ptrdiff_t>(&val);
+					new_type.emplace<std::remove_reference_t<decltype(field)>>(name, offset);
+					new_type.size += sizeof(std::remove_reference_t<decltype(field)>);
 				});
 			} else if constexpr (is_reflectable) {
 				pfr::for_each_field(val, [&val, &new_type](const auto& field) {
-					using FieldClearType = std::remove_reference_t<std::remove_const_t<decltype(field)>>;
-					const std::ptrdiff_t offset = (std::ptrdiff_t)(&field) - (std::ptrdiff_t)(&val);
+					const std::ptrdiff_t offset = reinterpret_cast<std::ptrdiff_t>(&field) - reinterpret_cast<std::ptrdiff_t>(&val);
+
 					grr::string field_name;
 					field_name.resize(14);
-					std::snprintf(field_name.data(), 10, "var%u", (std::uint32_t)offset);
+					std::snprintf(field_name.data(), 14, "var%u", static_cast<std::uint32_t>(offset));
 
-					new_type.emplace<FieldClearType>(field_name.data(), offset);
-					new_type.size += sizeof(FieldClearType);
+					new_type.emplace<std::remove_reference_t<decltype(field)>>(field_name.data(), offset);
+					new_type.size += sizeof(std::remove_reference_t<decltype(field)>);
 				});
 			}
 		} else {
@@ -549,12 +548,18 @@ namespace grr
 			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType>(), sizeof(ClearType) });
 			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType&>(), sizeof(ClearType) });
 			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType&>(), sizeof(ClearType) });
-			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType&>(), sizeof(ClearType) });
+			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType&>(), sizeof(ClearType) });		
+			
+			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType const>(), sizeof(ClearType) });
 		}
 
 		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType*>(), sizeof(ClearType*) });	
 		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType*>(), sizeof(ClearType*) });			
-		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType*>(), sizeof(ClearType*) });
+		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType*>(), sizeof(ClearType*) });		
+		
+		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType* const>(), sizeof(ClearType*) });	
+		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType* const>(), sizeof(ClearType*) });
+		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType* const>(), sizeof(ClearType*) });
 	}
 
 	namespace detail

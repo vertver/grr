@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <utility>
 #include <array>
+#include <algorithm>
 
 #ifdef GRR_PREDECLARE_FIELDS
 #ifndef PFR_HPP

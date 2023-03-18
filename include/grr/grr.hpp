@@ -8,10 +8,11 @@
 #include <grr/grr_stuff.hpp>
 #include <grr/grr_def.hpp>
 #include <grr/grr_types.hpp>
-
-#include <grr/detail/name_parser.hpp>
-
 #include <grr/grr_base.hpp>
 
+#ifndef VISITABLE_STRUCT
+#define GRR_REFLECT(__VA_ARGS__) 
+#else
 #define GRR_REFLECT VISITABLE_STRUCT
+#endif
 #endif
