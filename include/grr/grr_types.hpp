@@ -105,6 +105,16 @@ namespace grr
 
 	template<typename T>
 	constexpr bool is_fallback_type_v = is_fallback_type<T>::value;
+
+	template<typename T>
+	constexpr bool is_reflectable_v = 
+		visit_struct::traits::is_visitable<
+			std::remove_pointer_t<std::remove_cv_t<T>>
+		>::value ||
+		pfr::is_implicitly_reflectable<
+			std::remove_pointer_t<std::remove_cv_t<T>>, 
+			std::remove_pointer_t<std::remove_cv_t<T>>
+		>::value;
 }
 
 #endif

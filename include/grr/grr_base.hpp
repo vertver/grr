@@ -44,10 +44,10 @@ namespace grr
 
 	struct field
 	{
-		field(const char* new_name, type_id new_id, std::size_t new_offset)
+		GRR_CONSTEXPR field(const char* new_name, type_id new_id, std::size_t new_offset)
 			: name(new_name), id(new_id), offset(new_offset) {}
 
-		field(const string_view& new_name, type_id new_id, std::size_t new_offset)
+		GRR_CONSTEXPR field(const string_view& new_name, type_id new_id, std::size_t new_offset)
 			: name(new_name), id(new_id), offset(new_offset) {}
 
 		field() = default;
@@ -155,7 +155,7 @@ namespace grr
 	};
 
 	template<typename T>
-	constexpr string_view type_name()
+	constexpr auto type_name()
 	{
 		return grr::detail::compiler_type_name<T>(0);
 	}
@@ -170,7 +170,7 @@ namespace grr
 	}
 
 	template<typename T>
-	constexpr T binhash(const string_view& str)
+	constexpr T binhash(const std::string_view& str)
 	{
 		T hash = T(5381);
 		for (const char& sym : str) {
@@ -187,14 +187,92 @@ namespace grr
 		return *str != '\0' ? static_cast<unsigned int>(*str) + 33 * binhash<T>(str + 1) : 5381;
 	}
 
+	template<typename T, std::size_t max_indexes = 64>
+	constexpr 
+	T
+	serializable_hash(const grr::string_view& str)
+	{
+		constexpr grr::string_view strings[] =
+		{
+			"struct",       // MSVC stuff
+			"class",        // MSVC stuff
+			"__cxx11::",    // GCC stuff
+			"__cxx14::",    // GCC stuff
+			"__cxx17::",    // GCC stuff
+			"__cxx20::",    // GCC stuff
+			"__cxx23::",    // GCC stuff
+			" "             // MSVC and GCC stuff
+		};
+
+		T hash = T(5381);
+		std::size_t indexes_count = 0;
+		std::array<std::size_t, max_indexes> indexes;
+		for (const grr::string_view& comparable : strings) {
+			std::size_t start = -1;
+			for (size_t i = 0; i < str.size(); i++) {
+				if (start == std::size_t(-1)) {
+					if (str.at(i) == comparable.at(0)) {
+						start = i;
+						continue;
+					}
+				} else {
+					const size_t offset = i - start;
+					if (offset >= comparable.size()) {
+						indexes[indexes_count] = start;
+						indexes[indexes_count + 1] = start + comparable.size();
+						indexes_count += 2;
+						if (indexes_count == indexes.size()) {
+							break;
+						}
+
+						start = std::size_t(-1);
+						continue;
+					}
+
+					if (str.at(i) != comparable.at(offset)) {
+						start = std::size_t(-1);
+						continue;
+					}
+				}
+			}
+		}
+    
+		std::size_t current_idx = 0;
+		std::sort(indexes.begin(), indexes.begin() + indexes_count);
+		for (size_t i = 0; i < str.size(); i++) {
+			if (current_idx > 0) {
+				if (current_idx >= indexes_count) {
+					break;
+				}
+
+				if (i >= indexes[current_idx + 1]) {
+					current_idx += 2;
+				}
+
+				if (current_idx >= indexes_count) {
+					break;
+				}
+
+				if (i >= indexes[current_idx] && i < indexes[current_idx + 1]) {
+					continue;
+				}
+			}
+
+			hash *= 0x21;
+			hash += str[i];
+		}
+
+		return hash;
+	}
+
 	constexpr type_id obtain_id(const char* name)
 	{
-		return binhash<type_id>(name);
+		return serializable_hash<type_id>(name);
 	}	
 	
-	constexpr type_id obtain_id(const string_view& name)
+	constexpr type_id obtain_id(const grr::string_view& name)
 	{
-		return binhash<type_id>(name);
+		return serializable_hash<type_id>(name);
 	}
 
 	template<typename T>
@@ -370,7 +448,7 @@ namespace grr
 	
 	template<std::size_t recursion_levels = 0, typename T>
 	static constexpr void visit(const grr::context& context, T& data, auto&& func)
-{
+	{
 		constexpr type_id id = grr::obtain_id<T>();
 		if constexpr (std::is_const_v<T>) {
 			grr::visit(context, reinterpret_cast<const void*>(&data), id, func);
@@ -381,29 +459,35 @@ namespace grr
 
 	struct type_declaration
 	{
-		const context* current_context;
 		bool aggregate = false;
+		const context* current_context;
 		std::size_t size;
 		string name;
 		type_id id;
 		vector<field> fields;
 
-		type_declaration() = delete;
-		type_declaration(type_declaration&) = delete;
-		type_declaration(const type_declaration&) = delete;
-		type_declaration(type_declaration&&) = default;
+		GRR_CONSTEXPR type_declaration() = delete;
+		GRR_CONSTEXPR type_declaration(type_declaration&) = delete;
+		GRR_CONSTEXPR type_declaration(const type_declaration&) = delete;
+		GRR_CONSTEXPR type_declaration(type_declaration&&) = default;
 
-		type_declaration(const context& in_context, const char* type_name)
-			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(0) {}
+		GRR_CONSTEXPR type_declaration(const context& in_context, const char* type_name) noexcept
+			: current_context(&in_context), name(type_name), id(obtain_id(type_name)), size(0) {}
 		
-		type_declaration(const context& in_context, const string_view& type_name)
-			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(0) {}	
+		GRR_CONSTEXPR type_declaration(const context& in_context, const string_view& type_name) noexcept
+			: current_context(&in_context), name(type_name.begin(), type_name.end()), id(obtain_id(type_name)), size(0) {}
+
+		GRR_CONSTEXPR type_declaration(const context& in_context, type_id in_id, const char* type_name) noexcept
+			: current_context(&in_context), name(type_name), id(in_id), size(0) {}
+
+		GRR_CONSTEXPR type_declaration(const context& in_context, type_id in_id, const string_view& type_name) noexcept
+			: current_context(&in_context), name(type_name.begin(), type_name.end()), id(in_id), size(0) {}
 		
-		type_declaration(const context& in_context, const char* type_name, std::size_t new_size)
-			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(new_size) {}
+		GRR_CONSTEXPR type_declaration(const context& in_context, const char* type_name, std::size_t new_size) noexcept
+			: current_context(&in_context), name(type_name), id(obtain_id(type_name)), size(new_size) {}
 		
-		type_declaration(const context& in_context, const string_view& type_name, std::size_t new_size)
-			: current_context(&in_context), name(type_name), id(obtain_id(name)), size(new_size) {}
+		GRR_CONSTEXPR type_declaration(const context& in_context, const string_view& type_name, std::size_t new_size) noexcept
+			: current_context(&in_context), name(type_name.begin(), type_name.end()), id(obtain_id(type_name)), size(new_size) {}
 
 		bool field_erase(const char* field_name)
 		{
@@ -504,14 +588,14 @@ namespace grr
 	void add_type(context& current_context)
 	{
 		using ClearType = std::remove_pointer_t<std::remove_cv_t<T>>;
-		type_declaration new_type = { current_context, grr::type_name<ClearType>() };
+		type_declaration new_type = type_declaration(current_context, grr::obtain_id<ClearType>(), grr::type_name<ClearType>());
 		constexpr bool is_aggregate = std::is_aggregate<ClearType>();
 
 #ifdef GRR_PREDECLARE_FIELDS
 		if constexpr (is_aggregate) {
 			constexpr bool is_visitable = visit_struct::traits::is_visitable<ClearType>::value;
 			constexpr bool is_reflectable = pfr::is_implicitly_reflectable_v<ClearType, ClearType>;
-			static_assert(is_visitable || is_reflectable, "GRR supports only aggregate types (such as PODs)");
+			static_assert(grr::is_reflectable_v<T>, "GRR supports only aggregate types (such as PODs)");
 
 			const ClearType val = {};
 			if constexpr (is_visitable) {

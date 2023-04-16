@@ -9,6 +9,9 @@
 #include <grr/grr_def.hpp>
 #include <grr/grr_types.hpp>
 #include <grr/grr_base.hpp>
+#include <grr/grr_serialization.hpp>
+#include <grr/grr_entt.hpp>
+#include <grr/grr_lua.hpp>
 
 #ifndef VISITABLE_STRUCT
 #define GRR_REFLECT(__VA_ARGS__) 

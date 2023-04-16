@@ -15,7 +15,7 @@
 
 #ifdef GRR_PREDECLARE_FIELDS
 #ifndef PFR_HPP
-#include <pfr.hpp>
+#include <pfr/pfr.hpp>
 #endif
 
 #ifndef VISIT_STRUCT_HPP_INCLUDED

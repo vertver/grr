@@ -67,7 +67,7 @@ namespace grr::detail
 
 	// https://bitwizeshift.github.io/posts/2021/03/09/getting-an-unmangled-type-name-at-compile-time/
 	template<typename T>
-	constexpr grr::string_view compiler_type_name(int unused /* hack for newer versions of MSVC */)
+	constexpr auto compiler_type_name(int unused /* hack for newer versions of MSVC */)
 	{
 		(void)(unused);
 
@@ -88,7 +88,7 @@ namespace grr::detail
 		constexpr std::size_t end = function.rfind(suffix);
 
 		static_assert(start < end);
-		constexpr grr::string_view name = function.substr(start, (end - start));
+		constexpr auto name = function.substr(start, (end - start));
 
 		return name;
 	}

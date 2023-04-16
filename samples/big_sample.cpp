@@ -52,14 +52,12 @@ public:
 
 void run_big_sample()
 {
-	auto visit_fields = []<typename T>(const T & field, const char* name) {
+	auto visit_fields = []<typename T>(const T& field, const char* name) {
 		if constexpr (std::is_integral_v<T>) {
 			std::cout << name << ": " << std::to_string(field) << std::endl;
-		}
-		else if constexpr (std::is_same_v<T, grr::string>) {
+		} else if constexpr (std::is_same_v<T, grr::string>) {
 			std::cout << name << ": " << field << std::endl;
-		}
-		else if constexpr (grr::is_fallback_type_v<T>) {
+		} else if constexpr (grr::is_fallback_type_v<T>) {
 			constexpr grr::type_id vector_typeid = grr::obtain_id<int_vector>();
 			if (vector_typeid == field.second.second) {
 				const int_vector* my_vector = reinterpret_cast<const int_vector*>(field.second.first);
@@ -143,234 +141,6 @@ void run_big_sample()
 	grr::visit(context, instance, visit_fields);
 }
 
-struct test_struct
-{
-    int a;
-};
-
-template<typename T>
-struct another_test_struct
-{
-    T a;
-};
-
-template <std::size_t...Idxs>
-constexpr auto substring_as_array(std::string_view str, std::index_sequence<Idxs...>)
-{
-    return std::array{ str[Idxs]..., '\0' };
-}
-
-template<typename T>
-constexpr auto compiler_type_name_array(int unused /* hack for newer versions of MSVC */)
-{
-    (void)(unused);
-
-#if defined(__clang__)
-    constexpr std::string_view prefix = "[T = ";
-    constexpr std::string_view suffix = "]";
-    constexpr std::string_view function = __PRETTY_FUNCTION__;
-#elif defined(__GNUC__)
-    constexpr std::string_view prefix = "with T = ";
-    constexpr std::string_view suffix = "]";
-    constexpr std::string_view function = __PRETTY_FUNCTION__;
-#elif defined(_MSC_VER)
-    constexpr std::string_view prefix = __FUNCTION__"<";
-    constexpr std::string_view suffix = ">(int)";
-    constexpr std::string_view function = __FUNCSIG__;
-#endif
-    constexpr std::size_t start = function.find(prefix) + prefix.size();
-    constexpr std::size_t end = function.rfind(suffix);
-
-    static_assert(start < end);
-    constexpr std::string_view name = function.substr(start, (end - start));
-    constexpr std::size_t bracket = name.find_first_of(';');
-    if constexpr (bracket != std::size_t(-1)) {
-        constexpr std::string_view extracted_name = function.substr(start, bracket);
-        return substring_as_array(extracted_name, std::make_index_sequence<extracted_name.size()>{});
-    }
-
-    return substring_as_array(name, std::make_index_sequence<name.size()>{});
-}
-
-template <typename T>
-struct type_name_holder {
-    static inline constexpr auto value = compiler_type_name_array<T>(0);
-};
-
-template <typename T>
-constexpr std::string_view type_name()
-{
-    constexpr auto& value = type_name_holder<T>::value;
-    return std::string_view{ value.data(), value.size() };
-}
-
-template<typename T, std::size_t max_indexes = 64>
-constexpr auto friendly_name()
-{
-    constexpr auto str = type_name<T>();
-    constexpr std::string_view strings[] =
-    {
-        "struct",       // MSVC stuff
-        "class",        // MSVC stuff
-        "__cxx11::",    // GCC stuff
-        "__cxx14::",    // GCC stuff
-        "__cxx17::",    // GCC stuff
-        "__cxx20::",    // GCC stuff
-        "__cxx23::",    // GCC stuff
-        " "             // MSVC and GCC stuff
-    };
-
-    std::string out_string;
-    std::size_t indexes_count = 0;
-    std::array<std::size_t, max_indexes> indexes;
-    for (const std::string_view& comparable : strings) {
-        std::size_t start = -1;
-        for (size_t i = 0; i < str.size(); i++) {
-            if (start == std::size_t(-1)) {
-                if (str.at(i) == comparable.at(0)) {
-                    start = i;
-                    continue;
-                }
-            } else {
-                const size_t offset = i - start;
-                if (offset >= comparable.size()) {
-                    indexes[indexes_count] = start;
-                    indexes[indexes_count + 1] = start + comparable.size();
-                    indexes_count += 2;
-                    if (indexes_count == indexes.size()) {
-                        break;
-                    }
-
-                    start = std::size_t(-1);
-                    continue;
-                }
-
-                if (str.at(i) != comparable.at(offset)) {
-                    start = std::size_t(-1);
-                    continue;
-                }
-            }
-        }
-    }
-    
-    std::size_t current_idx = 0;
-    std::sort(indexes.begin(), indexes.begin() + indexes_count);
-    for (size_t i = 0; i < str.size(); i++) {
-        if (current_idx < indexes_count) {
-            if (i >= indexes[current_idx + 1]) {
-                current_idx += 2;
-            }
-
-            if (i >= indexes[current_idx] && i < indexes[current_idx + 1] ) {
-                continue;
-            }
-        }
-
-        out_string.push_back(str[i]);
-    }
-
-    return out_string;
-}
-
-/*
-std::string filtered_time_name()
-{
-    using element = std::pair<std::size_t, std::array<std::size_t, 16 + 1>>;
-
-    auto str = type_name<std::string>();
-    auto find_str = [](std::string_view str, std::string_view cmp) -> element {
-        element out_elements;
-
-        std::size_t start = -1;
-        for (std::size_t i = 0; i < str.size(); i++) {
-            if (out_elements.first == 16) {
-                break;
-            }
-
-            if (start == -1) {
-                if (str[i] == cmp[0]) {
-                    if (cmp.size() == 1) {
-                        out_elements.second[out_elements.first++] = i;
-                        start = std::size_t(-1);
-                        break;
-                    }
-
-                    start = i;
-                    continue;
-                }
-            }
-            else {
-                if (i - start >= cmp.size()) {
-                    out_elements.second[out_elements.first++] = start;
-                    start = std::size_t(-1);
-                    break;
-                }
-
-                const char& left = str[i];
-                const char& right = cmp[i - start];
-                if (left != right) {
-                    start = std::size_t(-1);
-                }
-            }
-        }
-
-        return out_elements;
-    };
-
-    std::array<element, 6> elements = {
-        find_str(str, "class "),
-        find_str(str, "struct "),
-        find_str(str, "__cxx11::"),
-        find_str(str, "__cxx14::"),
-        find_str(str, "__cxx17::"),
-        find_str(str, "__cxx20::")
-    };
-
-    std::array<std::size_t, 6> elements_size = {
-        6,
-        7,
-        7,
-        7,
-        7,
-        7
-    };
-
-    std::string out_string;
-    for (std::size_t i = 0; i < str.size(); i++) {
-        bool break_now = false;
-        for (std::size_t elem_idx = 0; elem_idx < elements.size(); elem_idx++) {
-            std::size_t elem_size = elements_size[elem_idx];
-            const auto& elem = elements[elem_idx];
-            for (std::size_t instance_idx = 0; instance_idx < elem.first; instance_idx++) {
-                std::size_t instance = elem.second[instance_idx];
-                if (i >= instance && i < instance + elem_size) {
-                    break_now = true;
-                    break;
-                }
-            }
-
-            if (break_now == true) {
-                break;
-            }
-        }
-
-        if (break_now) {
-            continue;
-        }
-
-        //if (str[i] == ' ') {
-        //    continue;
-        //}
-
-        //hash *= 0x21;
-        //hash += str[i];
-        out_string.push_back(str[i]);
-    }
-
-    return out_string;
-}
-*/
-
 void run_another_test()
 {
     //const std::string_view concated_string = concat_range<std::string>(std::index_sequence<10>{}, std::index_sequence<14>{});  
@@ -379,19 +149,16 @@ void run_another_test()
 
     //constexpr std::size_t typei = type_id<std::size_t>();
     //std::cout << typei << std::endl;
-    constexpr std::string_view full_type_name = type_name<std::string>();
-    auto friendly_type_name = friendly_name<std::string>();
-    std::cout << full_type_name << std::endl;
-   // std::cout << type_name<test_struct>() << std::endl;
-    std::cout << friendly_type_name << std::endl;
-    //std::cout << filtered_time_name() << std::endl;
-    //std::cout << type_name<another_test_struct<std::string>>() << std::endl;
+    constexpr auto type_name = grr::type_name<std::string>();
+	constexpr auto type_hash = grr::serializable_hash<grr::type_id>(type_name);
+    std::cout << type_name << std::endl;
+    std::cout << type_hash << std::endl;
 }
 
 
 int main()
 {
-    run_another_test();
-	//run_big_sample();
+    //run_another_test();
+	run_big_sample();
 	return 0;
 }
