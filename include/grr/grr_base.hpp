@@ -265,22 +265,6 @@ namespace grr
 		return hash;
 	}
 
-	constexpr bool type_serializable(const grr::string_view& type_name)
-	{
-		return (type_name.find('<', 0) == static_cast<std::size_t>(-1));
-	}
-
-	constexpr bool type_serializable(const char* name)
-	{
-		return (grr::string_view(name).find('<', 0) == static_cast<std::size_t>(-1));
-	}
-
-	template<typename T>
-	constexpr bool type_serializable()
-	{
-		return type_serializable(type_name<grr::clear_type<T>>());
-	}
-
 	constexpr type_id obtain_id(const char* name)
 	{
 		return serializable_hash<type_id>(name);

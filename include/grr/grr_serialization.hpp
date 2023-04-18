@@ -74,7 +74,6 @@ namespace grr
 		int world;
 	};
 
-	
 	namespace detail
 	{ 
 		template<typename T>
