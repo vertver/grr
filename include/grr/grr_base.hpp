@@ -265,6 +265,22 @@ namespace grr
 		return hash;
 	}
 
+	constexpr bool type_serializable(const grr::string_view& type_name)
+	{
+		return (type_name.find('<', 0) == static_cast<std::size_t>(-1));
+	}
+
+	constexpr bool type_serializable(const char* name)
+	{
+		return (grr::string_view(name).find('<', 0) == static_cast<std::size_t>(-1));
+	}
+
+	template<typename T>
+	constexpr bool type_serializable()
+	{
+		return type_serializable(type_name<grr::clear_type<T>>());
+	}
+
 	constexpr type_id obtain_id(const char* name)
 	{
 		return serializable_hash<type_id>(name);
@@ -278,8 +294,7 @@ namespace grr
 	template<typename T>
 	constexpr type_id obtain_id()
 	{
-		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
-		return obtain_id(type_name<ClearType>());
+		return obtain_id(type_name<grr::clear_type<T>>());
 	}
 
 	inline std::size_t size(const context& current_context, type_id id)
@@ -331,43 +346,37 @@ namespace grr
 	template<typename T>
 	constexpr void rename(context& current_context, std::size_t field_idx, const string_view& new_name)
 	{
-		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
-		current_context.at(obtain_id<ClearType>()).fields.at(field_idx).name = string(new_name.begin(), new_name.end());
+		current_context.at(obtain_id<grr::clear_type<T>>()).fields.at(field_idx).name = string(new_name.begin(), new_name.end());
 	}
 
 	template<typename T>
 	constexpr void rename(context& current_context, const string_view& new_name)
 	{
-		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
-		current_context.rename(obtain_id<ClearType>(), new_name);
+		current_context.rename(obtain_id<grr::clear_type<T>>(), new_name);
 	}
 	 
 	template<typename T>
 	constexpr void rename(context& current_context, const char* new_name)
 	{
-		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
-		current_context.rename(obtain_id<ClearType>(), new_name);
+		current_context.rename(obtain_id<grr::clear_type<T>>(), new_name);
 	}
 
 	template<typename T>
 	constexpr bool contains(const context& current_context)
 	{
-		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
-		return current_context.contains(obtain_id<ClearType>());
+		return current_context.contains(obtain_id<grr::clear_type<T>>());
 	}
 
 	template<typename T>
 	constexpr bool size(const context& current_context)
 	{
-		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
-		return current_context.size(obtain_id<ClearType>());
+		return current_context.size(obtain_id<grr::clear_type<T>>());
 	}
 
 	template<typename T>
 	constexpr std::size_t offset(context& current_context, std::size_t field_idx)
 	{
-		using ClearType = std::remove_reference_t<std::remove_cv_t<T>>;
-		return current_context.at(obtain_id<ClearType>()).fields.at(field_idx).offset;
+		return current_context.at(obtain_id<grr::clear_type<T>>()).fields.at(field_idx).offset;
 	}
 
 	namespace detail
@@ -587,7 +596,7 @@ namespace grr
 	template<typename T> 
 	void add_type(context& current_context)
 	{
-		using ClearType = std::remove_pointer_t<std::remove_cv_t<T>>;
+		using ClearType = grr::clear_type<T>;
 		type_declaration new_type = type_declaration(current_context, grr::obtain_id<ClearType>(), grr::type_name<ClearType>());
 		constexpr bool is_aggregate = std::is_aggregate<ClearType>();
 

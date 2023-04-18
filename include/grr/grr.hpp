@@ -12,10 +12,4 @@
 #include <grr/grr_serialization.hpp>
 #include <grr/grr_entt.hpp>
 #include <grr/grr_lua.hpp>
-
-#ifndef VISITABLE_STRUCT
-#define GRR_REFLECT(__VA_ARGS__) 
-#else
-#define GRR_REFLECT VISITABLE_STRUCT
-#endif
 #endif

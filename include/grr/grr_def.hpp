@@ -56,9 +56,16 @@
 #ifndef GRR_WIDESTRING_VIEW
 #include <string_view>
 #define GRR_WIDESTRING_VIEW std::wstring_view
-#endif
-#endif
 #else
 #define GRR_WIDESTRING
 #define GRR_WIDESTRING_VIEW
+#endif
+#endif
+
+#ifndef VISITABLE_STRUCT
+#define GRR_REFLECT(STRUCT_NAME, ...) 
+#else
+#define GRR_REFLECT VISITABLE_STRUCT
+#endif
+
 #endif
