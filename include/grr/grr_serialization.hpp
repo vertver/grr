@@ -203,26 +203,30 @@ namespace grr
 		if constexpr (std::is_same_v<ClearType, char*>) {
 			return value.data();
 		} else if constexpr (grr::type_exists<ClearType::value_type>::value) {
+			ClearType out_value;
 			grr::string_view element_string;
-			size_t offset = value.find_first_of('{');
-			if (offset == size_t(-1)) {
+			std::size_t offset = value.find_first_of('{');
+			if (offset == std::size_t(-1)) {
 				// #TODO: parsing error
-				return {};
+				return out_value;
 			}
 
 			offset = value.find_first_not_of(' ', offset + 1);
-			if (offset == size_t(-1)) {
+			if (offset == std::size_t(-1)) {
 				// #TODO: parsing error
-				return {};
+				return out_value;
 			}
 
-			const size_t offset_end = value.find_last_of('}');
-			while (offset != size_t(-1) && offset < offset_end) {
+			const std::size_t offset_end = value.find_last_of('}');
+			if (offset_end == std::size_t(-1)) {
+				offset_end = value.size() - 1;
+			}
+
+			while (offset != std::size_t(-1) && offset < offset_end) {
 				constexpr bool is_key_value_map = grr::is_key_value_map_v<ClearType>;
-		
-				size_t begin_offset = value.find_first_not_of(is_key_value_map ? '(' : ' ', offset);
-				size_t end_offset = value.find_first_of(is_key_value_map ? ')' : ' ', begin_offset);
-				if (end_offset == size_t(-1)) {
+				std::size_t begin_offset = is_key_value_map ? value.find_first_of('(', offset) : value.find_first_not_of(' ', offset);
+				std::size_t end_offset = value.find_first_of(is_key_value_map ? ')' : ' ', begin_offset);
+				if (end_offset == std::size_t(-1)) {
 					end_offset = offset_end;
 				}
 
@@ -233,10 +237,29 @@ namespace grr
 				offset = end_offset;
 				element_string = grr::string_view(value.data() + begin_offset, value.data() + end_offset);
 				if constexpr (grr::type_exists<ClearType::key_type>::value) {
-					if constexpr (is_key_value_map) {
-						// this is std::map or equal
+					if constexpr (is_key_value_map) {			
+						const std::size_t key_offset_begin = value.find_first_not_of(' ', begin_offset + 1);
+						const std::size_t key_offset_end = value.find_first_of(' ', key_offset_begin);
+						if (key_offset_begin == std::size_t(-1) || key_offset_end == std::size_t(-1)) {
+							// #TODO: parsing error
+							return out_value;
+						}
+
+						const std::size_t value_offset_begin = value.find_first_not_of(' ', key_offset_end);
+						const std::size_t value_offset_end = value.find_first_of(' ', value_offset_begin);
+						if (value_offset_begin == std::size_t(-1) || value_offset_end == std::size_t(-1)) {
+							// #TODO: parsing error
+							return out_value;
+						}
+
+						const grr::string_view key_string = grr::string_view(value.data() + key_offset_begin, value.data() + key_offset_end);
+						const grr::string_view value_string = grr::string_view(value.data() + value_offset_begin, value.data() + value_offset_end);
+						//ClearType::key_type map_key = grr::unstringify<ClearType::key_type>(key_string);
+						//ClearType::mapped_type map_value = grr::unstringify<ClearType::mapped_type>(value_string);
+						//out_value.emplace(std::make_pair(std::move(map_key), std::move(map_value)));
 					} else {
-						// this is std::set or equal
+						const std::size_t value_offset_begin = value.find_first_not_of(' ', begin_offset + 1);
+						const std::size_t value_offset_end = value.find_first_of(' ', value_offset_begin);
 					}
 				}
 			}
