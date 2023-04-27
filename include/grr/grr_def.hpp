@@ -7,7 +7,7 @@
 #define GRR_DEF_HPP_INCLUDED
 
 #ifndef GRR_TYPE_ID
-#define GRR_TYPE_ID std::uint64_t
+#define GRR_TYPE_ID std::int64_t
 #endif
 
 #ifndef GRR_INVALID_SIZE
