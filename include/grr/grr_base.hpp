@@ -160,7 +160,7 @@ namespace grr
 		return grr::detail::compiler_type_name<T>(0);
 	}
 
-	const char* type_name(const context& current_context, type_id id)
+	inline const char* type_name(const context& current_context, type_id id)
 	{
 		if (!current_context.contains(id)) {
 			return "";
