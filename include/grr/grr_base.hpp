@@ -7,12 +7,19 @@
 #define GRR_BASE_HPP_INCLUDED
 #include <grr/detail/name_parser.hpp>
 
+#define GRR_RETURN_IF_FAILED(x) \
+	(x); \
+	if (err) { \
+		return;\
+	}
+
 namespace grr
 {
 	enum class errors : int
 	{
 		invalid_argument,
 		unregistered_id,
+		already_registered,
 		out_of_range
 	};
 
@@ -23,6 +30,8 @@ namespace grr
 			static const char* err_msg[] =
 			{
 				"Invalid argument",
+				"Unregisted ID",
+				"Already registered",
 				"Out of range"
 			};
 
@@ -121,22 +130,22 @@ namespace grr
 			return storage.end();
 		}
 
-		void rename(type_id id, const char* new_name)
+		void rename(type_id id, const char* new_name, std::error_code& err)
 		{
 			const auto& it = storage.find(id);
 			if (it == storage.end()) {
-				// #TODO: error handling here
+				err = make_error_code(errors::unregistered_id);
 				return;
 			}
 
 			it->second.name = new_name;
 		}
 
-		void rename(type_id id, const string_view& new_name)
+		void rename(type_id id, const string_view& new_name, std::error_code& err)
 		{
 			const auto& it = storage.find(id);
 			if (it == storage.end()) {
-				// #TODO: error handling here
+				err = make_error_code(errors::unregistered_id);
 				return;
 			}
 
@@ -208,7 +217,7 @@ namespace grr
 		std::size_t indexes_count = 0;
 		std::array<std::size_t, max_indexes> indexes;
 		for (const grr::string_view& comparable : strings) {
-			std::size_t start = -1;
+			std::size_t start = static_cast<std::size_t>(-1);
 			for (size_t i = 0; i < str.size(); i++) {
 				if (start == std::size_t(-1)) {
 					if (str.at(i) == comparable.at(0)) {
@@ -291,29 +300,62 @@ namespace grr
 		return current_context.contains(id);
 	}
 
-	inline void rename(context& current_context, type_id id, std::size_t field_idx, const char* new_name)
+	inline void rename(context& current_context, type_id id, std::size_t field_idx, const char* new_name, std::error_code& err)
 	{
-		current_context.at(id).fields.at(field_idx).name = new_name;
+		if (!current_context.contains(id)) {
+			err = make_error_code(errors::unregistered_id);
+			return;
+		}
+
+		auto& fields = current_context.at(id).fields;
+		if (field_idx >= fields.size()) {
+			err = make_error_code(errors::invalid_argument);
+			return;
+		}
+
+		fields.at(field_idx).name = new_name;
 	}
 
-	inline void rename(context& current_context, type_id id, std::size_t field_idx, const string_view& new_name)
+	inline void rename(context& current_context, type_id id, std::size_t field_idx, const string_view& new_name, std::error_code& err)
 	{
-		current_context.at(id).fields.at(field_idx).name = string(new_name.begin(), new_name.end());
+		if (!current_context.contains(id)) {
+			err = make_error_code(errors::unregistered_id);
+			return;
+		}
+
+		auto& fields = current_context.at(id).fields;
+		if (field_idx >= fields.size()) {
+			err = make_error_code(errors::invalid_argument);
+			return;
+		}
+
+		fields.at(field_idx).name = string(new_name.begin(), new_name.end());
 	}
 
-	inline void rename(context& current_context, type_id id, const char* new_name)
+	inline void rename(context& current_context, type_id id, const char* new_name, std::error_code& err)
 	{
-		current_context.rename(id, new_name);
+		current_context.rename(id, new_name, err);
 	}
 	
-	inline void rename(context& current_context, type_id id, const string_view& new_name)
+	inline void rename(context& current_context, type_id id, const string_view& new_name, std::error_code& err)
 	{
-		current_context.rename(id, new_name);
+		current_context.rename(id, new_name, err);
 	}
 
-	inline std::size_t offset(context& current_context, type_id id, std::size_t field_idx)
+	inline std::size_t offset(context& current_context, type_id id, std::size_t field_idx, std::error_code& err)
 	{
-		return current_context.at(id).fields.at(field_idx).offset;
+		if (!current_context.contains(id)) {
+			err = make_error_code(errors::unregistered_id);
+			return 0;
+		}
+
+		auto& fields = current_context.at(id).fields;
+		if (field_idx >= fields.size()) {
+			err = make_error_code(errors::invalid_argument);
+			return 0;
+		}
+
+		return fields.at(field_idx).offset;
 	}
 
 	inline type_id base_type(context& current_context, type_id id)
@@ -324,43 +366,52 @@ namespace grr
 	template<typename T>
 	constexpr type_id base_type()
 	{
-		return obtain_id<std::remove_pointer_t<std::remove_reference_t<std::remove_cv_t<T>>>>();
+		return obtain_id<std::remove_pointer_t<grr::clear_type<T>>>();
 	}
 
 	template<typename T>
-	constexpr void rename(context& current_context, std::size_t field_idx, const string_view& new_name)
+	inline void rename(context& current_context, std::size_t field_idx, const string_view& new_name, std::error_code& err)
 	{
-		current_context.at(obtain_id<grr::clear_type<T>>()).fields.at(field_idx).name = string(new_name.begin(), new_name.end());
+		constexpr type_id id = obtain_id<grr::clear_type<T>>();
+		rename(current_context, id, field_idx, new_name, err);
+	}	
+	
+	template<typename T>
+	inline void rename(context& current_context, std::size_t field_idx, const char* new_name, std::error_code& err)
+	{
+		constexpr type_id id = obtain_id<grr::clear_type<T>>();
+		rename(current_context, id, field_idx, new_name, err);
 	}
 
 	template<typename T>
-	constexpr void rename(context& current_context, const string_view& new_name)
+	inline void rename(context& current_context, const string_view& new_name, std::error_code& err)
 	{
-		current_context.rename(obtain_id<grr::clear_type<T>>(), new_name);
+		current_context.rename(obtain_id<grr::clear_type<T>>(), new_name, err);
 	}
 	 
 	template<typename T>
-	constexpr void rename(context& current_context, const char* new_name)
+	inline void rename(context& current_context, const char* new_name, std::error_code& err)
 	{
-		current_context.rename(obtain_id<grr::clear_type<T>>(), new_name);
+		current_context.rename(obtain_id<grr::clear_type<T>>(), new_name, err);
 	}
 
 	template<typename T>
-	constexpr bool contains(const context& current_context)
+	inline bool contains(const context& current_context)
 	{
 		return current_context.contains(obtain_id<grr::clear_type<T>>());
 	}
 
 	template<typename T>
-	constexpr bool size(const context& current_context)
+	inline bool size(const context& current_context)
 	{
 		return current_context.size(obtain_id<grr::clear_type<T>>());
 	}
 
 	template<typename T>
-	constexpr std::size_t offset(context& current_context, std::size_t field_idx)
+	inline std::size_t offset(context& current_context, std::size_t field_idx, std::error_code& err)
 	{
-		return current_context.at(obtain_id<grr::clear_type<T>>()).fields.at(field_idx).offset;
+		constexpr type_id id = obtain_id<grr::clear_type<T>>();
+		return offset(current_context, id, field_idx, err);
 	}
 
 	namespace detail
@@ -371,17 +422,20 @@ namespace grr
 			using ClearDataType = std::remove_pointer_t<decltype(data)>;
 
 			// #TODO: poor optimized, need to rework this one
+			/*
 			if constexpr (!std::is_same_v<T, void>) {
-				constexpr type_id current_id = grr::obtain_id<T>();
-				if (!called && current_id == id) {
-					if constexpr (std::is_const_v<ClearDataType>) {
-						func(*reinterpret_cast<const T*>(data), name);
-					} else {
-						func(*reinterpret_cast<T*>(data), name);
-					}
 
-					called = true;
+			}
+			*/
+			constexpr type_id current_id = grr::obtain_id<T>();
+			if (!called && current_id == id) {
+				if constexpr (std::is_const_v<ClearDataType>) {
+					func(*reinterpret_cast<const T*>(data), name);
+				} else {
+					func(*reinterpret_cast<T*>(data), name);
 				}
+
+				called = true;
 			}
 			
 			constexpr type_id current_ptr_id = grr::obtain_id<T*>();
@@ -403,42 +457,40 @@ namespace grr
 			(visit_static_once<Types>(data, name, id, called, func), ...);
 			return called;
 		}
-	}
 
-	template<std::size_t recursion_level = 0>
-	static constexpr void visit(const grr::context& context, auto data, type_id id, auto&& func)
-	{
-		if (!context.contains(id)) {
-			throw new std::invalid_argument("unregistered type id");
-		}
-
-		const auto& type_info = context.obtain(id);
-		for (const auto& cfield : type_info.fields) {
-			auto field_ptr = data;
-			const type_id field_id = cfield.id;
-			if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
-				field_ptr = static_cast<const char*>(data) + cfield.offset;
-			} else {
-				field_ptr = static_cast<char*>(data) + cfield.offset;
-			}		
+		template<std::size_t recursion_level = 0>
+		static constexpr bool visit(const grr::context& context, auto data, type_id id, auto&& func)
+		{		
+			const auto& type_info = context.obtain(id);
+			for (const auto& cfield : type_info.fields) {
+				auto field_ptr = data;
+				const type_id field_id = cfield.id;
+				if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
+					field_ptr = static_cast<const char*>(data) + cfield.offset;
+				} else {
+					field_ptr = static_cast<char*>(data) + cfield.offset;
+				}		
 			
-			if constexpr (recursion_level > 0) {
-				visit<recursion_level - 1>(context, field_ptr, field_id);
-			} else {
-				if (detail::visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
-					continue;
-				}
+				if constexpr (recursion_level > 0) {
+					visit<recursion_level - 1>(context, field_ptr, field_id);
+				} else {
+					if (detail::visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
+						continue;
+					}
 
-				if (!context.contains(field_id)) {
-					throw new std::invalid_argument("unregistered type id");
-				}
+					if (!context.contains(field_id)) {
+						return false;
+					}
 
-				const auto& field_type = context.obtain(field_id);
-				func(std::make_pair(field_type.size, std::make_pair(field_ptr, field_id)), cfield.name.data());
+					const auto& field_type = context.obtain(field_id);
+					func(std::make_pair(field_type.size, std::make_pair(field_ptr, field_id)), cfield.name.data());
+				}
 			}
+
+			return true;
 		}
 	}
-	
+
 	template<std::size_t recursion_levels = 0, typename T>
 	static constexpr void visit(const grr::context& context, T& data, auto&& func)
 	{
@@ -447,6 +499,31 @@ namespace grr
 			grr::visit(context, reinterpret_cast<const void*>(&data), id, func);
 		} else {
 			grr::visit(context, reinterpret_cast<void*>(&data), id, func);
+		}
+	}
+		
+	template<std::size_t recursion_level = 0>
+	static constexpr void visit(const grr::context& context, auto data, type_id id, std::error_code& err, auto&& func)
+	{
+		if (!context.contains(id)) {
+			err = make_error_code(errors::unregistered_id);
+			return;
+		}
+
+		if (!grr::detail::visit<recursion_level>(context, data, id, func)) {
+			err = make_error_code(errors::unregistered_id);
+			return;
+		}
+	}
+	
+	template<std::size_t recursion_levels = 0, typename T>
+	static constexpr void visit(const grr::context& context, T& data, std::error_code& err, auto&& func)
+	{
+		constexpr type_id id = grr::obtain_id<T>();
+		if constexpr (std::is_const_v<T>) {
+			grr::visit(context, reinterpret_cast<const void*>(&data), id, err, func);
+		} else {
+			grr::visit(context, reinterpret_cast<void*>(&data), id, err, func);
 		}
 	}
 
@@ -484,15 +561,10 @@ namespace grr
 
 		bool field_erase(const char* field_name)
 		{
-			const std::size_t name_size = std::strlen(field_name);
+			const auto field_hash = binhash<std::uint32_t>(field_name);
 			for (auto it = fields.begin(); it != fields.end(); it++) {
 				const auto& field_elem = *it;
-				const std::size_t field_name_size = std::strlen(field_elem.name.data());
-				if (name_size != field_name_size) {
-					continue;
-				}
-
-				if (!std::strncmp(field_name, field_elem.name.data(), name_size)) {
+				if (field_hash == binhash<std::uint32_t>(field_elem.name.data())) {
 					fields.erase(it);
 					return true;
 				}
@@ -512,11 +584,12 @@ namespace grr
 		}
 
 		template<typename T>
-		void emplace(const char* field_name)
+		void emplace(const char* field_name, std::error_code& err)
 		{
 			constexpr type_id current_id = obtain_id<T>();
 			if (!grr::contains(*current_context, current_id)) {
-				throw new std::invalid_argument("unregistered type id");
+				err = make_error_code(errors::unregistered_id);
+				return;
 			}
 
 			const std::size_t offset = fields.empty() ? 0 : fields.back().offset + grr::size(*current_context, fields.back().id);
@@ -524,61 +597,67 @@ namespace grr
 		}
 
 		template<typename T>
-		void emplace(const char* field_name, std::size_t offset)
+		void emplace(const char* field_name, std::size_t offset, std::error_code& err)
 		{
 			constexpr type_id current_id = obtain_id<T>();
 			if (!grr::contains(*current_context, current_id)) {
-				throw new std::invalid_argument("unregistered type id");
+				err = make_error_code(errors::unregistered_id);
+				return;
 			}
 
 			fields.emplace_back(std::move(field(field_name, current_id, offset)));
 		}
 
-		void erase(std::size_t idx)
+		void erase(std::size_t idx, std::error_code& err)
 		{
 			if (!field_erase(idx)) {
-				throw new std::invalid_argument("invalid index");
+				err = make_error_code(errors::invalid_argument);
+				return;
 			}
 		}
 
-		void erase(const char* field_name)
+		void erase(const char* field_name, std::error_code& err)
 		{
 			if (!field_erase(field_name)) {
-				throw new std::invalid_argument("invalid field name");
+				err = make_error_code(errors::invalid_argument);
+				return;
 			}
 		}
 	};
 
-	inline void add_type(context& current_context, const type_declaration& type)
+	inline void add_type(context& current_context, const type_declaration& type, std::error_code& err)
 	{
 		if (current_context.contains(type.id)) {
-			throw new std::invalid_argument("type already exists");
+			err = make_error_code(errors::already_registered);
+			return;
 		}
 
 		current_context.add(type.id, std::move(type_context{ type.id, type.size, type.name, type.name, type.fields }));
 	}
 
-	inline void add_type(context& current_context, const type_declaration& type, type_id base_type)
+	inline void add_type(context& current_context, const type_declaration& type, type_id base_type, std::error_code& err)
 	{
 		if (current_context.contains(type.id)) {
-			throw new std::invalid_argument("type already exists");
+			err = make_error_code(errors::already_registered);
+			return;
 		}
 
 		current_context.add(type.id, std::move(type_context{ base_type, type.size, type.name, type.name, type.fields }));
 	}
 
 	template<typename BaseType>
-	constexpr void add_type(context& current_context, const type_declaration& type)
+	constexpr void add_type(context& current_context, const type_declaration& type, std::error_code& err)
 	{
 		if (current_context.contains(type.id)) {
-			throw new std::invalid_argument("type already exists");
+			err = make_error_code(errors::already_registered);
+			return;
 		}
 
 		current_context.add(type.id, std::move(type_context{ obtain_id<BaseType>(), type.size, type.name, type.name, type.fields }));
 	}
 
 	template<typename T> 
-	void add_type(context& current_context)
+	void add_type(context& current_context, std::error_code& err)
 	{
 		using ClearType = grr::clear_type<T>;
 		type_declaration new_type = type_declaration(current_context, grr::obtain_id<ClearType>(), grr::type_name<ClearType>());
@@ -619,39 +698,37 @@ namespace grr
 #endif
 
 		new_type.aggregate = is_aggregate;
-		grr::add_type(current_context, new_type);
+		grr::add_type(current_context, new_type, err);
 		if constexpr (!std::is_void_v<ClearType>) {
-			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType>(), sizeof(ClearType) });
-			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType>(), sizeof(ClearType) });
-			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType&>(), sizeof(ClearType) });
-			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType&>(), sizeof(ClearType) });
-			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType&>(), sizeof(ClearType) });		
-			
-			grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType const>(), sizeof(ClearType) });
+			GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType>(), sizeof(ClearType) }, err));
+			GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType>(), sizeof(ClearType) }, err));
+			GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType&>(), sizeof(ClearType) }, err));
+			GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType&>(), sizeof(ClearType) }, err));
+			GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType&>(), sizeof(ClearType) }, err));		
+			GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType const>(), sizeof(ClearType) }, err));
 		}
 
-		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType*>(), sizeof(ClearType*) });	
-		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType*>(), sizeof(ClearType*) });			
-		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType*>(), sizeof(ClearType*) });		
-		
-		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType* const>(), sizeof(ClearType*) });	
-		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType* const>(), sizeof(ClearType*) });
-		grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType* const>(), sizeof(ClearType*) });
+		GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType*>(), sizeof(ClearType*) }, err));
+		GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType*>(), sizeof(ClearType*) }, err));
+		GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType*>(), sizeof(ClearType*) }, err));	
+		GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<ClearType* const>(), sizeof(ClearType*) }, err));
+		GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<volatile ClearType* const>(), sizeof(ClearType*) }, err));
+		GRR_RETURN_IF_FAILED(grr::add_type<ClearType>(current_context, { current_context, grr::type_name<const ClearType* const>(), sizeof(ClearType*) }, err));
 	}
 
 	namespace detail
 	{
 		template<typename... Types>
-		void add_types(context& current_context)
+		void add_types(context& current_context, std::error_code& err)
 		{
-			(grr::add_type<Types>(current_context), ...);
+			(grr::add_type<Types>(current_context, err), ...);
 		}
 	}
 
-	inline context make_context()
+	inline context make_context(std::error_code& err)
 	{
 		context out_context;
-		detail::add_types<GRR_TYPES>(out_context);
+		detail::add_types<GRR_TYPES>(out_context, err);
 		return out_context;
 	}
 }

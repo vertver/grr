@@ -31,9 +31,9 @@ namespace grr
 		} else if constexpr (std::is_same_v<T, std::int32_t>) {
 			snprintf(string_value.data(), 32, "%d", value);
 		} else if constexpr (std::is_same_v<T, std::int64_t>) {
-			snprintf(string_value.data(), 32, "%ll", value);
+			snprintf(string_value.data(), 32, "%l", value);
 		} else {
-			snprintf(string_value.data(), 32, "%lld", value);
+			snprintf(string_value.data(), 32, "%i", value);
 		}
 
 		string_value.shrink_to_fit();
