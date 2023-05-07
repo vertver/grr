@@ -9,6 +9,7 @@
 #include <grr/grr_def.hpp>
 #include <grr/grr_types.hpp>
 #include <grr/grr_base.hpp>
+#include <grr/grr_base_exc.hpp>
 #include <grr/grr_serialization.hpp>
 #include <grr/grr_entt.hpp>
 #include <grr/grr_lua.hpp>

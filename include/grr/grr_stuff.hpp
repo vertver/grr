@@ -6,7 +6,6 @@
 #ifndef GRR_STUFF_HPP_INCLUDED
 #define GRR_STUFF_HPP_INCLUDED
 
-#include <typeinfo>
 #include <system_error>
 #include <cstdint>
 #include <utility>
@@ -28,7 +27,7 @@
 #endif
 
 #if defined(GRR_TS_REFLECT) && !defined(__cpp_lib_reflection)
-#error Unsupported compile for C++ reflection feature
+#error Unsupported compiler for C++ reflection feature
 #endif
 
 #ifndef GRR_USER_TYPES

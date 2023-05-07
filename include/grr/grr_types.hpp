@@ -119,6 +119,51 @@ namespace grr
 			std::remove_pointer_t<std::remove_cv_t<T>>
 		>::value;
 
+
+	namespace detail
+	{
+		template<typename T, typename U = void>
+		struct is_key_value_map : std::false_type { };
+
+		template<typename T>
+		struct is_key_value_map<T, std::void_t<
+			typename T::key_type,
+			typename T::mapped_type,
+			decltype(std::declval<T&>()[std::declval<const typename T::key_type&>()])>> 
+				: std::true_type { };	
+		
+		template<typename T, typename U = void>
+		struct is_key_map : std::false_type { };
+
+		template<typename T>
+		struct is_key_map<T, std::void_t<typename T::key_type>> : std::true_type { };
+
+		template<typename T, typename U = void>
+		struct is_container : std::false_type { };
+
+		template<typename T>
+		struct is_container<T, std::void_t<typename T::value_type>> : std::true_type { };
+	}
+
+	template<typename T>
+	struct is_key_value_map : detail::is_key_value_map<T>::type { };
+	template<typename T>
+	constexpr bool is_key_value_map_v = is_key_value_map<T>::value;	
+	
+	template<typename T>
+	struct is_key_map : detail::is_key_map<T>::type { };
+	template<typename T>
+	constexpr bool is_key_map_v = is_key_map<T>::value;
+
+	template<typename T>
+	struct is_container : detail::is_container<T>::type { };
+	template<typename T>
+	constexpr bool is_container_v = is_container<T>::value;
+
+	template<class T>
+	using clean_type = std::remove_reference_t<std::remove_cv_t<T>>;
+
+	/*
 	template<class T> struct EmptyType { typedef void type; };
 
 	template<class T, class U = void>
@@ -127,11 +172,12 @@ namespace grr
 	template<class T>
 	struct type_exists<T, typename EmptyType<T>::type> : std::true_type {};
 
-	template<class T>
-	using clear_type = std::remove_reference_t<std::remove_cv_t<T>>;
 
 	template<typename T, typename ClearType = grr::clear_type<T>>
-	constexpr bool is_key_value_map_v = grr::type_exists<ClearType::key_type>::value && grr::type_exists<ClearType::mapped_type>::value;
+	constexpr bool is_key_value_map_v = 
+		grr::type_exists<typename ClearType::key_type>::value && 
+		grr::type_exists<typename ClearType::mapped_type>::value;
+		*/
 }
 
 #endif
