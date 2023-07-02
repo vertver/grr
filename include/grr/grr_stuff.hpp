@@ -54,4 +54,10 @@
 #endif
 #endif
 
+#if GRR_CXX20_SUPPORT
+#define GRR_LIKELY [[likely]]
+#else
+#define GRR_LIKELY
+#endif
+
 #endif

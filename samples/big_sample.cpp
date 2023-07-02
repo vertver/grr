@@ -1,5 +1,6 @@
 #include "grr/grr.hpp"
 #include <iostream>
+#include <variant>
 
 using int_vector = std::vector<int>;
 
@@ -92,12 +93,7 @@ void run_big_sample()
 
 	for (const auto& [id, type] : context) {
 		const bool structured = !type.fields.empty();
-		if (!type.name.compare(type.platform_name)) {
-			std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.name << "\" id " << id;
-		} else {
-			std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.name << "\" (" << type.platform_name << ") id " << id;
-		}
-
+		std::cout << (structured ? "# Structure type \"" : "# Type \"") << type.name << "\" id " << id;
 		std::cout << std::flush;
 		std::cout << std::endl;
 		if (structured) {
@@ -109,7 +105,7 @@ void run_big_sample()
 
 	std::cout << std::endl;
 	std::uint64_t b_fields_count = 0;
-	grr::visit(context, b, err, [&b_fields_count]<typename T>(const T& field, const char* name) {
+	grr::reflect(context, b, err, [&b_fields_count]<typename T>(const T& field, const char* name) {
 		std::cout << name << std::endl;
 		b_fields_count++;
 	});
@@ -121,33 +117,36 @@ void run_big_sample()
 	my_string = new (my_string) grr::string;
 	*my_string = "Test runtime string";
 
-	auto before_stringify = grr::vector<std::vector<int>>{ {4, 5, 234, 1}, {5, 6, 4444, 123} };
+	//std::visit()
+
+	auto before_stringify = grr::vector<grr::vector<int>>{ {4, 5, 234, 1}, {5, 6, 4444, 123} };
 	grr::string stringified = grr::stringify(before_stringify);
 	grr::vector<grr::vector<int>> unstringified = grr::unstringify<grr::vector<grr::vector<int>>>(stringified.data(), err);
 
-	grr::visit(context, data, custom_type.id, err, visit_fields);
+	grr::reflect(context, data, custom_type.id, err, visit_fields);
 	std::cout << std::endl;
-	grr::visit(context, reflected_instance, err, visit_fields);
+	grr::reflect(context, reflected_instance, err, visit_fields);
 	std::cout << std::endl;
-	std::cout << "Printing befory renaming...";
+	std::cout << "Printing before renaming...";
 	std::cout << std::endl;
-	grr::visit(context, instance, err, visit_fields);
+	grr::reflect(context, instance, err, visit_fields);
 	std::cout << std::endl;
 	std::cout << "Printing after renaming...";
 	std::cout << std::endl;
-	grr::rename<my_struct>(context, "SUPER PUPER STRUCTURE", err);
+	grr::rename<my_struct>(context, "Custom structure name", err);
 	grr::rename<my_struct>(context, 0, "a", err);
 	grr::rename<my_struct>(context, 1, "c", err);
 	grr::rename<my_struct>(context, 2, "b", err);
 	grr::rename<my_struct>(context, 3, "s1", err);
 	grr::rename<my_struct>(context, 4, "s2", err);
 	grr::rename<my_struct>(context, 5, "memory", err);
-	grr::visit(context, instance, err, visit_fields);
+	grr::reflect(context, instance, err, visit_fields);
 }
 
 void run_another_test()
 {
     constexpr auto type_name = grr::type_name<std::string>();
+    constexpr auto stype_name = grr::type_name<another_reflected_struct>();
 	constexpr auto type_hash = grr::serializable_hash<grr::type_id>(type_name);
     std::cout << type_name << std::endl;
     std::cout << type_hash << std::endl;

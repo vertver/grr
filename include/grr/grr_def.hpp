@@ -27,6 +27,11 @@
 #define GRR_VECTOR std::vector
 #endif
 
+#ifndef GRR_OPTIONAL
+#include <optional>
+#define GRR_OPTIONAL std::optional
+#endif
+
 #ifndef GRR_HASH_MAP
 #include <unordered_map>
 #define GRR_HASH_MAP std::unordered_map

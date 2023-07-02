@@ -8,12 +8,12 @@
 
 namespace grr::detail
 {
-	constexpr const char* platform_name()
+	static constexpr const char* platform_name()
 	{
 		constexpr const char* name = 
 
 #ifdef _WIN32
-			"win32-"
+			"windows-"
 #elif __APPLE__ || __MACH__
 			"macos-";
 #elif __linux__
@@ -60,14 +60,14 @@ namespace grr::detail
 	}
 
 	template <std::size_t...Idxs>
-	constexpr auto substring_as_array(std::string_view str, std::index_sequence<Idxs...>)
+	static constexpr auto substring_as_array(std::string_view str, std::index_sequence<Idxs...>)
 	{
 		return std::array{ str[Idxs]..., '\0' };
 	}
 
 	// https://bitwizeshift.github.io/posts/2021/03/09/getting-an-unmangled-type-name-at-compile-time/
 	template<typename T>
-	constexpr auto compiler_type_name(int unused /* hack for newer versions of MSVC */)
+	static constexpr auto compiler_type_name(int unused /* hack for newer versions of MSVC */)
 	{
 		(void)(unused);
 

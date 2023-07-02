@@ -16,6 +16,9 @@ namespace grr
 	using allocator = std::allocator<T>;
 
 	template<typename T>
+	using optional = GRR_OPTIONAL<T>;
+
+	template<typename T>
 	using vector = GRR_VECTOR<T>;
 
 	template<typename K, typename V>
@@ -119,7 +122,6 @@ namespace grr
 			std::remove_pointer_t<std::remove_cv_t<T>>
 		>::value;
 
-
 	namespace detail
 	{
 		template<typename T, typename U = void>
@@ -162,22 +164,6 @@ namespace grr
 
 	template<class T>
 	using clean_type = std::remove_reference_t<std::remove_cv_t<T>>;
-
-	/*
-	template<class T> struct EmptyType { typedef void type; };
-
-	template<class T, class U = void>
-	struct type_exists : std::false_type {};
-
-	template<class T>
-	struct type_exists<T, typename EmptyType<T>::type> : std::true_type {};
-
-
-	template<typename T, typename ClearType = grr::clear_type<T>>
-	constexpr bool is_key_value_map_v = 
-		grr::type_exists<typename ClearType::key_type>::value && 
-		grr::type_exists<typename ClearType::mapped_type>::value;
-		*/
 }
 
 #endif
