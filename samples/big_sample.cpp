@@ -1,6 +1,5 @@
 #include "grr/grr.hpp"
 #include <iostream>
-#include <variant>
 
 using int_vector = std::vector<int>;
 
@@ -37,32 +36,29 @@ public:
 
 class a_class
 {
-	virtual bool a() { return false; }
+	virtual bool a() = 0;
 };
 
 class b_class : public a_class
 {
-private:
-	bool dds = false;
-
 public:
-	b_class(bool new_dds) : dds(new_dds) {}
+	b_class(bool new_dds) {}
 
-	bool a() override { return dds; }
+	bool a() override { std::cout << "a"; return false; }
 };
 
 void run_big_sample()
 {
 	auto visit_fields = []<typename T>(const T& field, const char* name) {
 		if constexpr (std::is_integral_v<T>) {
-			std::cout << name << ": " << std::to_string(field) << std::endl;
+			std::cout << "    " << name << ": " << std::to_string(field) << std::endl;
 		} else if constexpr (std::is_same_v<T, grr::string>) {
-			std::cout << name << ": " << field << std::endl;
+			std::cout << "    " << name << ": " << field << std::endl;
 		} else if constexpr (grr::is_fallback_type_v<T>) {
 			constexpr grr::type_id vector_typeid = grr::obtain_id<int_vector>();
 			if (vector_typeid == field.second.second) {
 				const int_vector* my_vector = reinterpret_cast<const int_vector*>(field.second.first);
-				std::cout << name << ": " << "vector ( ";
+				std::cout << "    " << name << ": " << "vector ( ";
 				for (const auto& elem : *my_vector) {
 					std::cout << std::to_string(elem) << " ";
 				}
@@ -71,7 +67,6 @@ void run_big_sample()
 		}
 	};
 
-	char data[64] = {};
 	const my_struct instance = { 1, 0, 2, "hello reflection", "under reflection", { 1, 2, 3, 4 } };
 	const another_reflected_struct reflected_instance = { 1, 0, nullptr, (void*)(size_t)-1 };
 	const my_class class_instance = my_class(1, 0);
@@ -105,34 +100,43 @@ void run_big_sample()
 
 	std::cout << std::endl;
 	std::uint64_t b_fields_count = 0;
-	grr::reflect(context, b, err, [&b_fields_count]<typename T>(const T& field, const char* name) {
+	grr::visit(context, b, err, [&b_fields_count]<typename T>(const T& field, const char* name) {
 		std::cout << name << std::endl;
 		b_fields_count++;
 	});
 
 	std::cout << "Detected " << std::to_string(b_fields_count) << " fields count in b_class..." << std::endl;
+	std::cout << "b_class size: " << std::to_string(grr::size<b_class>(context)) << std::endl;
 	std::cout << std::endl;
-
-	grr::string* my_string = reinterpret_cast<grr::string*>(&data[custom_type.fields[2].offset]);
-	my_string = new (my_string) grr::string;
-	*my_string = "Test runtime string";
-
-	//std::visit()
 
 	auto before_stringify = grr::vector<grr::vector<int>>{ {4, 5, 234, 1}, {5, 6, 4444, 123} };
 	grr::string stringified = grr::stringify(before_stringify);
 	grr::vector<grr::vector<int>> unstringified = grr::unstringify<grr::vector<grr::vector<int>>>(stringified.data(), err);
 
-	grr::reflect(context, data, custom_type.id, err, visit_fields);
+	char runtime_type_data[64] = {};
+	grr::construct(context, runtime_type_data, custom_type.id, err);
+	grr::visit(context, runtime_type_data, custom_type.id, err, []<typename T>(T& field, const char* name) {
+		if constexpr (!grr::is_fallback_type_v<T>) {
+			if constexpr (std::is_same_v<T, grr::string>) {
+				field = "Test runtime string";
+			}
+		}
+	});
+
+	std::cout << "Printing run-time reflected type..." << std::endl;
+	grr::visit(context, runtime_type_data, custom_type.id, err, visit_fields);
+	grr::destruct(context, runtime_type_data, custom_type.id, err);
 	std::cout << std::endl;
-	grr::reflect(context, reflected_instance, err, visit_fields);
+
+	std::cout << "Printin compile-time reflected type..." << std::endl;
+	grr::visit(context, reflected_instance, err, visit_fields);
 	std::cout << std::endl;
-	std::cout << "Printing before renaming...";
+
+	std::cout << "Printing before renaming..." << std::endl;
+	grr::visit(context, instance, err, visit_fields);
 	std::cout << std::endl;
-	grr::reflect(context, instance, err, visit_fields);
-	std::cout << std::endl;
-	std::cout << "Printing after renaming...";
-	std::cout << std::endl;
+
+	std::cout << "Printing after renaming..." << std::endl;
 	grr::rename<my_struct>(context, "Custom structure name", err);
 	grr::rename<my_struct>(context, 0, "a", err);
 	grr::rename<my_struct>(context, 1, "c", err);
@@ -140,7 +144,7 @@ void run_big_sample()
 	grr::rename<my_struct>(context, 3, "s1", err);
 	grr::rename<my_struct>(context, 4, "s2", err);
 	grr::rename<my_struct>(context, 5, "memory", err);
-	grr::reflect(context, instance, err, visit_fields);
+	grr::visit(context, instance, err, visit_fields);
 }
 
 void run_another_test()

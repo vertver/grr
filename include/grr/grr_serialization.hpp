@@ -6,6 +6,7 @@
 #ifndef GRR_SERIALIZATION_HPP_INCLUDED
 #define GRR_SERIALIZATION_HPP_INCLUDED
 
+// NOTE: This code section is still under development. Don't use it in production
 namespace grr
 {
 	inline std::uint64_t stoull(const char* str, int base = 10)

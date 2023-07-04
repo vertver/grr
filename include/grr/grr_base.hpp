@@ -307,9 +307,10 @@ namespace grr
             "__cxx23::",					// GCC stuff
             "{anonymous}::",				// GCC stuff
             "(anonymous namespace)::",		// Clang stuff
-            "`anonymous-namespace'::",		// MSVC stuff
-            " "								// MSVC and GCC stuff
+            "`anonymous-namespace'::"		// MSVC stuff
         };
+
+        //  " "								// MSVC and GCC stuff
 
         T hash = T(5381);
         std::size_t indexes_count = 0;
@@ -521,19 +522,60 @@ namespace grr
 
     namespace detail
     {
+        template<typename T, typename... Args>
+        static inline void construct(T* memory_to_construct, Args... args)
+        {
+        }
+
+        template<typename T, typename... Args>
+        static inline void destruct(T* memory_to_construct)
+        {
+            memory_to_construct->~T();
+        }
+
         template<typename T>
-        static constexpr void visit_static_once(auto data, const char* name, type_id id, bool& called, auto&& func)
+        static constexpr void visit_static(auto data, type_id id, const char* name, bool& called, auto&& func)
         {
             using CleanDataType = std::remove_pointer_t<decltype(data)>;
+            auto call_function = [](auto&& func, auto&& argument, const char* name) -> bool {
+                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), decltype(argument)>;
+                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), decltype(argument), const char*>;
+                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), decltype(argument)>;
+                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), decltype(argument), const char*>;
+                static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not acceptable");
 
+                if constexpr (callable_1) {
+                    return func(argument);
+                } else if constexpr (callable_2) {
+                    return func(argument, name);
+                } else if constexpr (callable_3) {
+                    func(argument);
+                    return true;
+                } else if constexpr (callable_4) {
+                    func(argument, name);
+                    return true;
+                }
+
+                return false;
+            };
+
+            constexpr type_id current_id = grr::obtain_id<T>();
+            if (!called && current_id == id) {
+                if constexpr (std::is_const_v<CleanDataType>) {
+                    called = call_function(func, *reinterpret_cast<const T*>(data));
+                } else {
+                    called = call_function(func, *reinterpret_cast<T*>(data));
+                }
+            }
+
+            /*
             if constexpr (!std::is_same_v<T, void>) {
                 constexpr type_id current_id = grr::obtain_id<T>();
                 if (!called && current_id == id) {
                     if constexpr (std::is_const_v<CleanDataType>) {
-                        func(*reinterpret_cast<const T*>(data), name);
-                    }
-                    else {
-                        func(*reinterpret_cast<T*>(data), name);
+                        call_function(func, *reinterpret_cast<const T*>(data));
+                    } else {
+                        call_function(func, *reinterpret_cast<T*>(data));
                     }
 
                     called = true;
@@ -543,99 +585,190 @@ namespace grr
             constexpr type_id current_ptr_id = grr::obtain_id<T*>();
             if (!called && current_ptr_id == id) {
                 if constexpr (std::is_const_v<CleanDataType>) {
-                    func(*reinterpret_cast<const T**>(reinterpret_cast<size_t>(data)), name);
-                }
-                else {
-                    func(*reinterpret_cast<T**>(reinterpret_cast<size_t>(data)), name);
+                    call_function(func, *reinterpret_cast<const T**>(reinterpret_cast<size_t>(data)));
+                } else {
+                    call_function(func, *reinterpret_cast<T**>(reinterpret_cast<size_t>(data)));
                 }
 
                 called = true;
             }
+            */
         }
 
         template<typename... Types>
         static constexpr bool visit_static(auto data, const char* name, type_id id, auto&& func)
         {
             bool called = false;
-            (visit_static_once<Types>(data, name, id, called, func), ...);
+            (visit_static<Types>(data, id, name, called, func), ...);
+            return called;
+        }
+
+        template<typename... Types>
+        static constexpr bool visit_static(auto data, type_id id, auto&& func)
+        {
+            bool called = false;
+            (visit_static<Types>(data, id, "var", called, func), ...);
             return called;
         }
 
         template<std::size_t recursion_level = 0>
-        static inline bool reflect(const grr::context& ctx, auto data, type_id id, auto&& func)
+        static inline void visit(const grr::context& ctx, auto data, type_id id, std::error_code& err, auto&& func)
         {
+            // [](auto& field, const char* name)
+            auto call_function = [](auto&& func, auto ptr, auto id, auto size) -> bool {
+                auto pair = std::make_pair(size, std::make_pair(ptr, id));
+                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), decltype(pair)>;
+                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), decltype(pair), const char*>;
+                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), decltype(pair)>;
+                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), decltype(pair), const char*>;
+                static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not acceptable");
+
+                if constexpr (callable_1) {
+                    return func(pair);
+                } else if constexpr (callable_2) {
+                    return func(pair, "var0");
+                } else if constexpr (callable_3) {
+                    func(pair);
+                    return true;
+                } else if constexpr (callable_4) {
+                    func(pair, "var0");
+                    return true;
+                }
+                
+                return false;
+            };
+
             const auto& type_info = ctx.obtain(id);
-            for (const auto& cfield : type_info.fields) {
-                auto field_ptr = data;
-                const type_id field_id = cfield.id;
+            if (type_info.fields.empty()) {
+                auto type_ptr = data;
                 if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
-                    field_ptr = static_cast<const char*>(data) + cfield.offset;
+                    type_ptr = static_cast<const char*>(data);
                 } else {
-                    field_ptr = static_cast<char*>(data) + cfield.offset;
+                    type_ptr = static_cast<char*>(data);
                 }
 
-                if constexpr (recursion_level > 0) {
-                    visit<recursion_level - 1>(ctx, field_ptr, field_id);
-                } else {
-                    if (detail::visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
+                if (!detail::visit_static<GRR_TYPES>(type_ptr, id, func)) {
+                    return;
+                }
+
+                if (!ctx.contains(id)) {
+                    err = make_error_code(errors::unregistered_id);
+                    return;
+                }
+    
+                if (!call_function(func, type_ptr, id, type_info.size)) {
+                    err = make_error_code(errors::invalid_argument);
+                    return;
+                }
+            } else {
+                for (const auto& cfield : type_info.fields) {
+                    auto field_ptr = data;
+                    const type_id field_id = cfield.id;
+                    if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
+                        field_ptr = static_cast<const char*>(data) + cfield.offset;
+                    } else {
+                        field_ptr = static_cast<char*>(data) + cfield.offset;
+                    }
+
+                    if constexpr (recursion_level > 0) {
+                        visit<recursion_level - 1>(ctx, field_ptr, field_id);
+                    } else {
+                        if (detail::visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
+                            continue;
+                        }
+
+                        if (!ctx.contains(field_id)) {
+                            err = make_error_code(errors::unregistered_id);
+                            return;
+                        }
+
+                        auto& field_type = ctx.obtain(field_id);
+                        if (!call_function(func, field_ptr, field_id, field_type.size)) {
+                            err = make_error_code(errors::invalid_argument);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        /*
+        template<std::size_t recursion_level = 0>
+        static inline void visit(const grr::context& ctx, auto data, type_id id, const char* field_name, std::error_code& err, auto&& func)
+        {
+            const auto& type_info = ctx.obtain(id);
+            if (type_info.fields.empty()) {
+                err = make_error_code(errors::invalid_argument);
+                return;
+            }
+
+            const auto name_hash = grr::binhash<grr::type_id>(field_name);
+            for (const auto& cfield : type_info.fields) {
+                const auto field_name_hash = grr::binhash<grr::type_id>(cfield.name.c_str());
+                if (field_name_hash == name_hash) {
+                    auto type_ptr = data;
+                    if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
+                        type_ptr = static_cast<const char*>(data) + cfield.offset;
+                    } else {
+                        type_ptr = static_cast<char*>(data) + cfield.offset;
+                    }
+
+                    if (detail::visit_static<GRR_TYPES>(type_ptr, id, func)) {
                         continue;
                     }
-
-                    if (!ctx.contains(field_id)) {
-                        return false;
-                    }
-
-                    auto& field_type = ctx.obtain(field_id);
-                    auto pair = std::make_pair(field_type.size, std::make_pair(field_ptr, field_id));
-                    func(pair, cfield.name.data());
                 }
             }
 
-            return true;
+            err = make_error_code(errors::out_of_range);
         }
+        */
     }
 
     template<std::size_t recursion_level = 0>
-    static inline void reflect(const grr::context& ctx, auto data, type_id id, std::error_code& err, auto&& func)
+    static inline void visit(const grr::context& ctx, auto data, type_id id, std::error_code& err, auto&& func)
     {
         if (!ctx.contains(id)) {
             err = make_error_code(errors::unregistered_id);
             return;
         }
 
-        if (!grr::detail::reflect<recursion_level>(ctx, data, id, func)) {
-            err = make_error_code(errors::unregistered_id);
+        grr::detail::visit<recursion_level>(ctx, data, id, err, func);
+        if (err) {
             return;
         }
     }
 
     template<typename T, std::size_t recursion_level = 0>
-    static inline void reflect(const grr::context& ctx, T& data, std::error_code& err, auto&& func)
+    static inline void visit(const grr::context& ctx, T& data, std::error_code& err, auto&& func)
     {
         constexpr type_id id = grr::obtain_id<T>();
         if constexpr (std::is_const_v<T>) {
-            grr::reflect<recursion_level>(ctx, reinterpret_cast<const void*>(&data), id, err, func);
+            grr::visit<recursion_level>(ctx, reinterpret_cast<const void*>(&data), id, err, func);
         } else {
-            grr::reflect<recursion_level>(ctx, reinterpret_cast<void*>(&data), id, err, func);
+            grr::visit<recursion_level>(ctx, reinterpret_cast<void*>(&data), id, err, func);
         }
-    }
-
-    template<typename T, typename... Args>
-    static inline void construct(T* memory_to_construct, Args... args)
-    {
-        memory_to_construct = new (memory_to_construct) T(args...);
     }
 
     static inline void construct(const grr::context& ctx, void* memory_to_construct, type_id id, std::error_code& err)
     {
-        grr::reflect(ctx, memory_to_construct, id, err, [](auto& field, const char* name) {
+        grr::visit(ctx, memory_to_construct, id, err, [](auto& field, const char* name) {
             using CleanType = grr::clean_type<decltype(field)>;
             if constexpr (!grr::is_fallback_type_v<CleanType>) {
-                grr::construct<CleanType>(&field);
+                grr::detail::construct<CleanType>(&field);
             }
         });
     }
 
+    static inline void destruct(const grr::context& ctx, void* memory_to_destruct, type_id id, std::error_code& err)
+    {
+        grr::visit(ctx, memory_to_destruct, id, err, [](auto& field, const char* name) {
+            using CleanType = grr::clean_type<decltype(field)>;
+            if constexpr (!grr::is_fallback_type_v<CleanType>) {
+                grr::detail::destruct<CleanType>(&field);
+            }
+        });
+    }
+        
     struct type_declaration
     {
         bool aggregate = false;
@@ -783,7 +916,7 @@ namespace grr
         if constexpr (is_aggregate) {
             constexpr bool is_visitable = visit_struct::traits::is_visitable<CleanType>::value;
             constexpr bool is_reflectable = pfr::is_implicitly_reflectable_v<CleanType, CleanType>;
-            static_assert(grr::is_reflectable_v<T>, "GRR supports only aggregate types (such as PODs)");
+            static_assert(grr::is_reflectable_v<T>, "GRR reflection supports only aggregate types (such as PODs)");
 
             const CleanType val = {};
             if constexpr (is_visitable) {
