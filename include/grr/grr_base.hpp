@@ -537,34 +537,46 @@ namespace grr
         static constexpr void visit_static(auto data, type_id id, const char* name, bool& called, auto&& func)
         {
             using CleanDataType = std::remove_pointer_t<decltype(data)>;
-            auto call_function = [](auto&& func, auto&& argument, const char* name) -> bool {
-                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), decltype(argument)>;
-                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), decltype(argument), const char*>;
-                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), decltype(argument)>;
-                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), decltype(argument), const char*>;
-                static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not acceptable");
+            auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
+                // #TODO: (auto& field, std::size_t idx)
+                using PairReference = std::add_lvalue_reference_t<decltype(*argument)>;
+                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), PairReference>;
+                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), PairReference, const char*>;
+                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), PairReference>;
+                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), PairReference, const char*>;
+                static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not accepted");
 
                 if constexpr (callable_1) {
-                    return func(argument);
+                    return func(*argument);
                 } else if constexpr (callable_2) {
-                    return func(argument, name);
+                    return func(*argument, name);
                 } else if constexpr (callable_3) {
-                    func(argument);
+                    func(*argument);
                     return true;
                 } else if constexpr (callable_4) {
-                    func(argument, name);
+                    func(*argument, name);
                     return true;
                 }
 
                 return false;
             };
 
-            constexpr type_id current_id = grr::obtain_id<T>();
-            if (!called && current_id == id) {
+            if constexpr (!std::is_same_v<T, void>) {
+                constexpr type_id current_id = grr::obtain_id<T>();
+                if (!called && current_id == id) {
+                    if constexpr (std::is_const_v<CleanDataType>) {
+                        called = call_function(func, reinterpret_cast<const T*>(data), name);
+                    } else {
+                        called = call_function(func, reinterpret_cast<T*>(data), name);
+                    }
+                }
+            }
+            constexpr type_id current_ptr_id = grr::obtain_id<T*>();
+            if (!called && current_ptr_id == id) {
                 if constexpr (std::is_const_v<CleanDataType>) {
-                    called = call_function(func, *reinterpret_cast<const T*>(data));
+                    called = call_function(func, reinterpret_cast<const T**>(reinterpret_cast<size_t>(data)), name);
                 } else {
-                    called = call_function(func, *reinterpret_cast<T*>(data));
+                    called = call_function(func, reinterpret_cast<T**>(reinterpret_cast<size_t>(data)), name);
                 }
             }
 
@@ -617,10 +629,13 @@ namespace grr
             // [](auto& field, const char* name)
             auto call_function = [](auto&& func, auto ptr, auto id, auto size) -> bool {
                 auto pair = std::make_pair(size, std::make_pair(ptr, id));
-                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), decltype(pair)>;
-                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), decltype(pair), const char*>;
-                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), decltype(pair)>;
-                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), decltype(pair), const char*>;
+                
+                // #TODO: (auto& field, std::size_t idx)
+                using PairReference = std::add_lvalue_reference_t<decltype(pair)>;
+                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), PairReference>;
+                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), PairReference, const char*>;
+                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), PairReference>;
+                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), PairReference, const char*>;
                 static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not acceptable");
 
                 if constexpr (callable_1) {
@@ -633,7 +648,7 @@ namespace grr
                 } else if constexpr (callable_4) {
                     func(pair, "var0");
                     return true;
-                }
+                } 
                 
                 return false;
             };
@@ -691,37 +706,6 @@ namespace grr
                 }
             }
         }
-
-        /*
-        template<std::size_t recursion_level = 0>
-        static inline void visit(const grr::context& ctx, auto data, type_id id, const char* field_name, std::error_code& err, auto&& func)
-        {
-            const auto& type_info = ctx.obtain(id);
-            if (type_info.fields.empty()) {
-                err = make_error_code(errors::invalid_argument);
-                return;
-            }
-
-            const auto name_hash = grr::binhash<grr::type_id>(field_name);
-            for (const auto& cfield : type_info.fields) {
-                const auto field_name_hash = grr::binhash<grr::type_id>(cfield.name.c_str());
-                if (field_name_hash == name_hash) {
-                    auto type_ptr = data;
-                    if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
-                        type_ptr = static_cast<const char*>(data) + cfield.offset;
-                    } else {
-                        type_ptr = static_cast<char*>(data) + cfield.offset;
-                    }
-
-                    if (detail::visit_static<GRR_TYPES>(type_ptr, id, func)) {
-                        continue;
-                    }
-                }
-            }
-
-            err = make_error_code(errors::out_of_range);
-        }
-        */
     }
 
     template<std::size_t recursion_level = 0>

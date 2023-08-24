@@ -1,4 +1,4 @@
-# GRR - "Games Require Reflection", library for integrating reflection into games
+# GRR - The reflection for games
 ![image](grr_logo.png)
 
 # How is it works?
@@ -97,6 +97,7 @@ Pretty simple! There is an a example of usage:
   - [ ] String serialization
   - [ ] Custom formats support
  - [ ] Full containers support (reflect all containers with pre-defined scalar types)
+ - [ ] Fields meta-data (markers, flags, etc)
 - Integrations
  - [ ] EnTT 
  - [ ] RapidJSON
