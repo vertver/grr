@@ -203,93 +203,6 @@ namespace grr
         return *str != '\0' ? static_cast<unsigned int>(*str) + 33 * binhash<T>(str + 1) : 5381;
     }
 
-    template<typename T>
-    static constexpr T optimized_serializable_hash(const grr::string_view& str)
-    {
-        constexpr std::pair<grr::string_view, std::size_t> strings[] =
-        {
-            { string_view("struct")				    , grr::binhash<std::size_t>("struct")					},  // MSVC stuff
-            { string_view("`anonymous-namespace'::"), grr::binhash<std::size_t>("`anonymous-namespace'::")	},  // MSVC stuff
-            { string_view("class")					, grr::binhash<std::size_t>("class")				    },  // MSVC stuff
-
-            { string_view("(anonymous namespace)::"), grr::binhash<std::size_t>("(anonymous namespace)::")	},  // Clang stuff
-
-            { string_view("{anonymous}::") 			, grr::binhash<std::size_t>("{anonymous}::")			},  // GCC stuff
-            { string_view("__cxx11::") 				, grr::binhash<std::size_t>("__cxx11::")				},  // GCC stuff
-            { string_view("__cxx14::") 				, grr::binhash<std::size_t>("__cxx14::")				},  // GCC stuff
-            { string_view("__cxx17::") 				, grr::binhash<std::size_t>("__cxx17::")				},  // GCC stuff
-            { string_view("__cxx20::") 				, grr::binhash<std::size_t>("__cxx20::")				},  // GCC stuff
-            { string_view("__cxx23::") 				, grr::binhash<std::size_t>("__cxx23::")				}   // GCC stuff
-        };
-
-        // 'c' - 0x63 - b01100011
-        // 's' - 0x73 - b01110011
-        // '`' - 0x60 - b01100000
-        // ' ' - 0x20 - b00100000
-        
-        // '(' - 0x28 - b00101000
-        
-        // '{' - 0x7B - b01111011
-        // '_' - 0x5F - b01011111
-        // ' ' - 0x20 - b00100000
-
-        T hash = T(5381);
-
-#ifdef _MSC_VER
-        for (size_t i = 0; i < str.size(); i++)
-        {
-            char sym = str[i];
-            std::uint8_t flag = (sym & 0b00101100);
-
-            //GRR_LIKELY
-            if (flag != 0b01100000) {
-                hash *= 0x21;
-                hash += str[i];
-                continue;
-            }
-
-            if (sym == 'c' && i + 5 < str.size()) {
-                constexpr std::size_t class_hash = grr::binhash<std::size_t>("class");
-                std::size_t hash = grr::binhash(&str[i], 5);
-
-                //GRR_LIKELY
-                if (hash == class_hash) {
-                    i += 5;
-                    continue;
-                }
-
-                hash *= 0x21;
-                hash += str[i];
-                continue;
-            }
-
-            if (sym == 's' && i + 6 < str.size()) {
-                constexpr std::size_t struct_hash = grr::binhash<std::size_t>("struct");
-                std::size_t hash = grr::binhash(&str[i], 6);
-
-                //GRR_LIKELY
-                if (hash == struct_hash) {
-                    i += 6;
-                    continue;
-                }
-
-                hash *= 0x21;
-                hash += str[i];
-                continue;
-            }
-
-            /*
-            // 'c' or 's'
-            if ((sym & 0b01101011) == 0b01100011) {
-
-            }
-            */
-        }
-#endif
-
-        return {};
-    }
-
     // TODO: This method was created for compile-time only execution. It may be useful
     // to create more faster runtime implementation of this (without using std::array or
     // other dynamically allocated memory)
@@ -298,8 +211,8 @@ namespace grr
     {
         constexpr grr::string_view strings[] =
         {
-            "struct ",						// MSVC stuff
-            "class ",						// MSVC stuff
+            "struct",						// MSVC stuff
+            "class",						// MSVC stuff
             "__cxx11::",					// GCC stuff
             "__cxx14::",					// GCC stuff
             "__cxx17::",					// GCC stuff
@@ -307,10 +220,9 @@ namespace grr
             "__cxx23::",					// GCC stuff
             "{anonymous}::",				// GCC stuff
             "(anonymous namespace)::",		// Clang stuff
-            "`anonymous-namespace'::"		// MSVC stuff
+            "`anonymous-namespace'::",		// MSVC stuff
+            " "								// MSVC and GCC stuff
         };
-
-        //  " "								// MSVC and GCC stuff
 
         T hash = T(5381);
         std::size_t indexes_count = 0;
@@ -539,11 +451,11 @@ namespace grr
             using CleanDataType = std::remove_pointer_t<decltype(data)>;
             auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
                 // #TODO: (auto& field, std::size_t idx)
-                using PairReference = std::add_lvalue_reference_t<decltype(*argument)>;
-                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), PairReference>;
-                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), PairReference, const char*>;
-                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), PairReference>;
-                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), PairReference, const char*>;
+                using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
+                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference>;
+                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference, const char*>;
+                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference>;
+                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference, const char*>;
                 static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not accepted");
 
                 if constexpr (callable_1) {
@@ -579,32 +491,6 @@ namespace grr
                     called = call_function(func, reinterpret_cast<T**>(reinterpret_cast<size_t>(data)), name);
                 }
             }
-
-            /*
-            if constexpr (!std::is_same_v<T, void>) {
-                constexpr type_id current_id = grr::obtain_id<T>();
-                if (!called && current_id == id) {
-                    if constexpr (std::is_const_v<CleanDataType>) {
-                        call_function(func, *reinterpret_cast<const T*>(data));
-                    } else {
-                        call_function(func, *reinterpret_cast<T*>(data));
-                    }
-
-                    called = true;
-                }
-            }
-
-            constexpr type_id current_ptr_id = grr::obtain_id<T*>();
-            if (!called && current_ptr_id == id) {
-                if constexpr (std::is_const_v<CleanDataType>) {
-                    call_function(func, *reinterpret_cast<const T**>(reinterpret_cast<size_t>(data)));
-                } else {
-                    call_function(func, *reinterpret_cast<T**>(reinterpret_cast<size_t>(data)));
-                }
-
-                called = true;
-            }
-            */
         }
 
         template<typename... Types>
@@ -631,11 +517,11 @@ namespace grr
                 auto pair = std::make_pair(size, std::make_pair(ptr, id));
                 
                 // #TODO: (auto& field, std::size_t idx)
-                using PairReference = std::add_lvalue_reference_t<decltype(pair)>;
-                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), PairReference>;
-                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), PairReference, const char*>;
-                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), PairReference>;
-                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), PairReference, const char*>;
+                using PairLReference = std::add_lvalue_reference_t<decltype(pair)>;
+                constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), PairLReference>;
+                constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), PairLReference, const char*>;
+                constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), PairLReference>;
+                constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), PairLReference, const char*>;
                 static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not acceptable");
 
                 if constexpr (callable_1) {

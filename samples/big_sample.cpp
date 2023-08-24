@@ -128,7 +128,7 @@ void run_big_sample()
 	grr::destruct(context, runtime_type_data, custom_type.id, err);
 	std::cout << std::endl;
 
-	std::cout << "Printin compile-time reflected type..." << std::endl;
+	std::cout << "Printing compile-time reflected type..." << std::endl;
 	grr::visit(context, reflected_instance, err, visit_fields);
 	std::cout << std::endl;
 
