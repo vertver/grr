@@ -828,7 +828,7 @@ namespace grr
         #endif
 
         new_type.aggregate = is_aggregate;
-        grr::add_type(ctx, new_type, err);
+        GRR_RETURN_IF_FAILED(grr::add_type(ctx, new_type, err));
         if constexpr (!std::is_void_v<CleanType>) {
             GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<volatile CleanType>(), sizeof(CleanType) }, err));
             GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<const CleanType>(), sizeof(CleanType) }, err));
