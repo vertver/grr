@@ -72,6 +72,7 @@ namespace grr
 #ifndef GRR_TYPES
 #define GRR_TYPES \
 	void, \
+	bool, \
 	char, \
 	short, \
 	long, \
