@@ -844,6 +844,11 @@ namespace grr
         GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<CleanType* const>(), sizeof(CleanType*) }, err));
         GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<volatile CleanType* const>(), sizeof(CleanType*) }, err));
         GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<const CleanType* const>(), sizeof(CleanType*) }, err));
+       
+        if constexpr (!std::is_same_v<CleanType, void>) {
+            GRR_RETURN_IF_FAILED(grr::add_type<grr::vector<CleanType>>(ctx, { ctx, grr::type_name<grr::vector<CleanType>>(), sizeof(grr::vector<CleanType>) }, err));
+            GRR_RETURN_IF_FAILED(grr::add_type< grr::vector<grr::vector<CleanType>>>(ctx, { ctx, grr::type_name<grr::vector<grr::vector<CleanType>>>(), sizeof(grr::vector<grr::vector<CleanType>>) }, err));
+        }
 
         #undef GRR_RETURN_IF_FAILED
     }
