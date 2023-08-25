@@ -5,13 +5,13 @@
 ***************************************************************************************/
 #ifndef GRR_BASE_HPP_INCLUDED
 #define GRR_BASE_HPP_INCLUDED
-#include <grr/detail/name_parser.hpp>
 
 namespace grr
 {
     enum class errors : int
     {
         invalid_argument,
+        invalid_type,
         unregistered_id,
         already_registered,
         parsing_failed,
@@ -161,7 +161,11 @@ namespace grr
     template<typename T>
     static constexpr auto type_name()
     {
-        return grr::detail::compiler_type_name<T>(0);
+        if constexpr (grr::is_reflectable_v<T>) {
+            return nameof::nameof_short_type<T>();
+        } else {
+            return nameof::nameof_type<T>();
+        }
     }
 
     static inline const char* type_name(const context& ctx, type_id id)
@@ -197,102 +201,9 @@ namespace grr
         return hash;
     }
 
-    template<typename T>
-    static constexpr T binhash(const char* str)
-    {
-        return *str != '\0' ? static_cast<unsigned int>(*str) + 33 * binhash<T>(str + 1) : 5381;
-    }
-
-    // TODO: This method was created for compile-time only execution. It may be useful
-    // to create more faster runtime implementation of this (without using std::array or
-    // other dynamically allocated memory)
-    template<typename T, std::size_t max_indexes = 64>
-    static constexpr T serializable_hash(const grr::string_view& str)
-    {
-        constexpr grr::string_view strings[] =
-        {
-            "struct",						// MSVC stuff
-            "class",						// MSVC stuff
-            "__cxx11::",					// GCC stuff
-            "__cxx14::",					// GCC stuff
-            "__cxx17::",					// GCC stuff
-            "__cxx20::",					// GCC stuff
-            "__cxx23::",					// GCC stuff
-            "{anonymous}::",				// GCC stuff
-            "(anonymous namespace)::",		// Clang stuff
-            "`anonymous-namespace'::",		// MSVC stuff
-            " "								// MSVC and GCC stuff
-        };
-
-        T hash = T(5381);
-        std::size_t indexes_count = 0;
-        std::array<std::size_t, max_indexes> indexes;
-        for (const grr::string_view& comparable : strings) {
-            std::size_t start = static_cast<std::size_t>(-1);
-            for (size_t i = 0; i < str.size(); i++) {
-                if (start == std::size_t(-1)) {
-                    if (str.at(i) == comparable.at(0)) {
-                        start = i;
-                        continue;
-                    }
-                } else {
-                    const size_t offset = i - start;
-                    if (offset >= comparable.size()) {
-                        indexes[indexes_count] = start;
-                        indexes[indexes_count + 1] = start + comparable.size();
-                        indexes_count += 2;
-                        if (indexes_count == indexes.size()) {
-                            break;
-                        }
-
-                        start = std::size_t(-1);
-                        continue;
-                    }
-
-                    if (str.at(i) != comparable.at(offset)) {
-                        start = std::size_t(-1);
-                        continue;
-                    }
-                }
-            }
-        }
-
-        std::size_t current_idx = 0;
-        std::sort(indexes.begin(), indexes.begin() + indexes_count);
-        for (size_t i = 0; i < str.size(); i++) {
-            if (current_idx > 0) {
-                if (current_idx >= indexes_count) {
-                    break;
-                }
-
-                if (i >= indexes[current_idx + 1]) {
-                    current_idx += 2;
-                }
-
-                if (current_idx >= indexes_count) {
-                    break;
-                }
-
-                if (i >= indexes[current_idx] && i < indexes[current_idx + 1]) {
-                    continue;
-                }
-            }
-
-            hash *= 0x21;
-            hash += str[i];
-        }
-
-        return hash;
-    }
-
-    static constexpr type_id obtain_id(const char* name)
-    {
-        return serializable_hash<type_id>(name);
-    }
-
     static constexpr type_id obtain_id(const grr::string_view& name)
     {
-        return serializable_hash<type_id>(name);
+        return binhash<type_id>(name);
     }
 
     template<typename T>
@@ -611,11 +522,62 @@ namespace grr
     template<typename T, std::size_t recursion_level = 0>
     static inline void visit(const grr::context& ctx, T& data, std::error_code& err, auto&& func)
     {
+        auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
+            using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
+            constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference>;
+            constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference, const char*>;
+            constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference>;
+            constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference, const char*>;
+            static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not accepted");
+
+            if constexpr (callable_1) {
+                return func(*argument);
+            } else if constexpr (callable_2) {
+                return func(*argument, name);
+            } else if constexpr (callable_3) {
+                func(*argument);
+                return true;
+            } else if constexpr (callable_4) {
+                func(*argument, name);
+                return true;
+            }
+
+            return false;
+        };
+
         constexpr type_id id = grr::obtain_id<T>();
-        if constexpr (std::is_const_v<T>) {
-            grr::visit<recursion_level>(ctx, reinterpret_cast<const void*>(&data), id, err, func);
+        using CleanType = grr::clean_type<T>;
+        if (!ctx.contains(id)) {
+            err = make_error_code(errors::unregistered_id);
+            return;
+        }
+
+        const auto& type_info = ctx.at(id);
+        if constexpr (pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
+            if (type_info.fields.empty()) {
+                err = make_error_code(errors::invalid_type);
+                return;
+            }
+
+            std::size_t index = 0;
+            pfr::for_each_field(data, [&err, &index, &type_info, &call_function, &func](auto& field) {
+                if (err || index >= type_info.fields.size()) {
+                    err = make_error_code(errors::invalid_type);
+                    return;
+                }
+
+                const auto& field_info = type_info.fields.at(index);
+                if (grr::obtain_id<decltype(field)>() != field_info.id) {
+                    err = make_error_code(errors::invalid_type);
+                    return;
+                }
+
+                call_function(func, &field, field_info.name.c_str());
+                index++;
+            });
         } else {
-            grr::visit<recursion_level>(ctx, reinterpret_cast<void*>(&data), id, err, func);
+            call_function(func, &data, "val");
+            return;
         }
     }
 
@@ -786,18 +748,18 @@ namespace grr
         if constexpr (is_aggregate) {
             constexpr bool is_visitable = visit_struct::traits::is_visitable<CleanType>::value;
             constexpr bool is_reflectable = pfr::is_implicitly_reflectable_v<CleanType, CleanType>;
-            static_assert(grr::is_reflectable_v<T>, "GRR reflection supports only aggregate types (such as PODs)");
+            static_assert(grr::is_reflectable_v<CleanType>, "GRR reflection supports only aggregate types (such as PODs)");
 
             const CleanType val = {};
             if constexpr (is_visitable) {
                 visit_struct::for_each(val, [&err, &val, &new_type](const char* name, const auto& field) {
                     const std::ptrdiff_t offset = reinterpret_cast<std::ptrdiff_t>(&field) - reinterpret_cast<std::ptrdiff_t>(&val);
-                    new_type.emplace<std::remove_reference_t<decltype(field)>>(name, offset, err);
+                    new_type.emplace<grr::clean_type<decltype(field)>>(name, offset, err);
                     if (err) {
                         return;
                     }
 
-                    new_type.size += sizeof(std::remove_reference_t<decltype(field)>);
+                    new_type.size += sizeof(grr::clean_type<decltype(field)>);
                 });
             } else if constexpr (is_reflectable) {
                 pfr::for_each_field(val, [&err, &val, &new_type](const auto& field) {
@@ -806,8 +768,12 @@ namespace grr
                     char field_name[16] = {};
                     std::snprintf(field_name, 16, "var%u", static_cast<std::uint32_t>(offset));
 
-                    new_type.emplace<std::remove_reference_t<decltype(field)>>(field_name, offset, err);
-                    new_type.size += sizeof(std::remove_reference_t<decltype(field)>);
+                    new_type.emplace<grr::clean_type<decltype(field)>>(field_name, offset, err);
+                    if (err) {
+                        return;
+                    }
+
+                    new_type.size += sizeof(grr::clean_type<decltype(field)>);
                 });
             }
         } else {
@@ -829,22 +795,6 @@ namespace grr
 
         new_type.aggregate = is_aggregate;
         GRR_RETURN_IF_FAILED(grr::add_type(ctx, new_type, err));
-        if constexpr (!std::is_void_v<CleanType>) {
-            GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<volatile CleanType>(), sizeof(CleanType) }, err));
-            GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<const CleanType>(), sizeof(CleanType) }, err));
-            GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<CleanType&>(), sizeof(CleanType) }, err));
-            GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<volatile CleanType&>(), sizeof(CleanType) }, err));
-            GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<const CleanType&>(), sizeof(CleanType) }, err));
-            GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<volatile CleanType const>(), sizeof(CleanType) }, err));
-        }
-
-        GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<CleanType*>(), sizeof(CleanType*) }, err));
-        GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<volatile CleanType*>(), sizeof(CleanType*) }, err));
-        GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<const CleanType*>(), sizeof(CleanType*) }, err));
-        GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<CleanType* const>(), sizeof(CleanType*) }, err));
-        GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<volatile CleanType* const>(), sizeof(CleanType*) }, err));
-        GRR_RETURN_IF_FAILED(grr::add_type<CleanType>(ctx, { ctx, grr::type_name<const CleanType* const>(), sizeof(CleanType*) }, err));
-       
         if constexpr (!std::is_same_v<CleanType, void>) {
             GRR_RETURN_IF_FAILED(grr::add_type<grr::vector<CleanType>>(ctx, { ctx, grr::type_name<grr::vector<CleanType>>(), sizeof(grr::vector<CleanType>) }, err));
             GRR_RETURN_IF_FAILED(grr::add_type< grr::vector<grr::vector<CleanType>>>(ctx, { ctx, grr::type_name<grr::vector<grr::vector<CleanType>>>(), sizeof(grr::vector<grr::vector<CleanType>>) }, err));

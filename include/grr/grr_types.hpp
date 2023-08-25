@@ -5,6 +5,11 @@
 ***************************************************************************************/
 #ifndef GRR_TYPES_HPP_INCLUDED
 #define GRR_TYPES_HPP_INCLUDED
+#include <system_error>
+#include <cstdint>
+#include <utility>
+#include <array>
+#include <algorithm>
 
 namespace grr
 {
@@ -113,16 +118,6 @@ namespace grr
 	template<typename T>
 	constexpr bool is_fallback_type_v = is_fallback_type<T>::value;
 
-	template<typename T>
-	constexpr bool is_reflectable_v = 
-		visit_struct::traits::is_visitable<
-			std::remove_pointer_t<std::remove_cv_t<T>>
-		>::value ||
-		pfr::is_implicitly_reflectable<
-			std::remove_pointer_t<std::remove_cv_t<T>>, 
-			std::remove_pointer_t<std::remove_cv_t<T>>
-		>::value;
-
 	namespace detail
 	{
 		template<typename T, typename U = void>
@@ -161,10 +156,13 @@ namespace grr
 	template<typename T>
 	struct is_container : detail::is_container<T>::type { };
 	template<typename T>
-	constexpr bool is_container_v = is_container<T>::value;
+	constexpr bool is_container_v = is_container<T>::value;	
 
 	template<class T>
 	using clean_type = std::remove_reference_t<std::remove_cv_t<T>>;
+
+	template<typename T>
+	constexpr bool is_container_not_string_v = is_container<T>::value && !std::is_same_v<grr::clean_type<T>, grr::string>;
 }
 
 #endif

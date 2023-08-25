@@ -6,24 +6,10 @@
 #ifndef GRR_STUFF_HPP_INCLUDED
 #define GRR_STUFF_HPP_INCLUDED
 
-#include <system_error>
-#include <cstdint>
-#include <utility>
-#include <array>
-#include <algorithm>
-
-#ifdef GRR_PREDECLARE_FIELDS
-#ifndef PFR_HPP
-#include <pfr/pfr.hpp>
-#endif
-
-#ifndef VISIT_STRUCT_HPP_INCLUDED
-#include <visit_struct/visit_struct.hpp>
-#endif
-
-#ifndef VISIT_STRUCT_INTRUSIVE_HPP_INCLUDED
-#include <visit_struct/visit_struct_intrusive.hpp>
-#endif
+#ifndef VISITABLE_STRUCT
+#define GRR_REFLECT(STRUCT_NAME, ...) 
+#else
+#define GRR_REFLECT VISITABLE_STRUCT
 #endif
 
 #if defined(GRR_TS_REFLECT) && !defined(__cpp_lib_reflection)
@@ -59,5 +45,13 @@
 #else
 #define GRR_LIKELY
 #endif
+
+namespace grr
+{
+	template<typename T>
+	constexpr bool is_reflectable_v =
+		visit_struct::traits::is_visitable<T>::value ||
+		pfr::is_implicitly_reflectable<T, T>::value;
+}
 
 #endif
