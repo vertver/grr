@@ -61,10 +61,10 @@
 #ifndef GRR_WIDESTRING_VIEW
 #include <string_view>
 #define GRR_WIDESTRING_VIEW std::wstring_view
+#endif
 #else
 #define GRR_WIDESTRING
 #define GRR_WIDESTRING_VIEW
-#endif
 #endif
 
 #ifdef GRR_PREDECLARE_FIELDS
@@ -82,9 +82,15 @@
 #endif
 
 #ifndef NEARGYE_NAMEOF_HPP
-#define NAMEOF_USING_ALIAS_STRING_VIEW using GRR_STRING_VIEW;
-#define NAMEOF_USING_ALIAS_STRING using GRR_STRING;
+#define NAMEOF_USING_ALIAS_STRING_VIEW using string_view = GRR_STRING_VIEW;
+#define NAMEOF_USING_ALIAS_STRING using string = GRR_STRING;
 #include <nameof/nameof.hpp>
+#endif
+
+#ifndef VISITABLE_STRUCT
+#define GRR_REFLECT(STRUCT_NAME, ...) 
+#else
+#define GRR_REFLECT VISITABLE_STRUCT
 #endif
 
 #endif

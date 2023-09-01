@@ -6,12 +6,6 @@
 #ifndef GRR_STUFF_HPP_INCLUDED
 #define GRR_STUFF_HPP_INCLUDED
 
-#ifndef VISITABLE_STRUCT
-#define GRR_REFLECT(STRUCT_NAME, ...) 
-#else
-#define GRR_REFLECT VISITABLE_STRUCT
-#endif
-
 #if defined(GRR_TS_REFLECT) && !defined(__cpp_lib_reflection)
 #error Unsupported compiler for C++ reflection feature
 #endif
@@ -48,10 +42,10 @@
 
 namespace grr
 {
-	template<typename T>
-	constexpr bool is_reflectable_v =
-		visit_struct::traits::is_visitable<T>::value ||
-		pfr::is_implicitly_reflectable<T, T>::value;
+    template<typename T>
+    constexpr bool is_reflectable_v =
+        visit_struct::traits::is_visitable<T>::value ||
+        pfr::is_implicitly_reflectable<T, T>::value;
 }
 
 #endif
