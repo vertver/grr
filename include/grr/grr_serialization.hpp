@@ -203,22 +203,25 @@ namespace grr
             return (id() == cmp_id);
         }
 
-        static inline grr::string stringify(custom_type&& value)
+        static inline grr::string stringify(custom_type value)
         {
+            (void)value;
             return detail::numeric_to_string(value.hello) + " " + detail::numeric_to_string(value.world);
         }
 
-        static inline custom_type unstrigify(grr::string_view&& value)
+        static inline custom_type unstrigify(grr::string_view value)
         {
+            (void)value;
             return {};
         }
 
-        static inline std::size_t serialize_size(custom_type&& value)
+        static inline std::size_t serialize_size(custom_type value)
         {
+            (void)value;
             return sizeof(custom_type);
         }
 
-        static inline void serialize(custom_type&& value, void* memory)
+        static inline void serialize(custom_type value, void* memory)
         {
             *reinterpret_cast<custom_type*>(memory) = value;
         }

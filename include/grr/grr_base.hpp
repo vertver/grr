@@ -367,9 +367,9 @@ namespace grr
             } else if constexpr (callable_4) {
                 func(*argument, name);
                 return true;
+            } else {
+                return false;
             }
-
-            return false;
         };
 
         constexpr type_id id = grr::obtain_id<T>();
@@ -683,7 +683,7 @@ namespace grr
 
     static inline void construct(const grr::context& ctx, void* memory_to_construct, type_id id, std::error_code& err)
     {
-        grr::visit(ctx, memory_to_construct, id, err, [](auto& field, const char* name) {
+        grr::visit(ctx, memory_to_construct, id, err, [](auto& field) {
             using CleanType = grr::clean_type<decltype(field)>;
             if constexpr (!grr::is_fallback_type_v<CleanType>) {
                 grr::construct<CleanType>(&field);
@@ -693,7 +693,7 @@ namespace grr
 
     static inline void destruct(const grr::context& ctx, void* memory_to_destruct, type_id id, std::error_code& err)
     {
-        grr::visit(ctx, memory_to_destruct, id, err, [](auto& field, const char* name) {
+        grr::visit(ctx, memory_to_destruct, id, err, [](auto& field) {
             using CleanType = grr::clean_type<decltype(field)>;
             if constexpr (!grr::is_fallback_type_v<CleanType>) {
                 grr::destruct<CleanType>(&field);
@@ -701,8 +701,9 @@ namespace grr
         });
     }
         
-    struct type_declaration
+    class type_declaration
     {
+    public:
         bool aggregate = false;
         const context* ctx;
         std::int64_t index;
