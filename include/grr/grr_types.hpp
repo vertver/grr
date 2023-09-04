@@ -103,17 +103,11 @@ namespace grr
 namespace grr
 {
     template<typename T>
-    struct is_statically_reflectable : std::false_type {};
-
-    template<typename T>
     struct is_fallback_type : std::false_type {};
     template<>
     struct is_fallback_type<ptr_pair> : std::true_type {};
     template<>
     struct is_fallback_type<const_ptr_pair> : std::true_type {};
-    
-    template<typename T>
-    constexpr bool is_statically_reflectable_v = is_fallback_type<T>::value;
 
     template<typename T>
     constexpr bool is_fallback_type_v = is_fallback_type<T>::value;
