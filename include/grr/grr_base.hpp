@@ -12,6 +12,7 @@ namespace grr
     {
         invalid_argument,
         invalid_type,
+        invalid_ordering,
         unregistered_id,
         already_registered,
         parsing_failed,
@@ -389,7 +390,7 @@ namespace grr
             std::size_t index = 0;
             pfr::for_each_field(data, [&err, &index, &type_info, &call_function, &func](auto& field) {
                 if (err || index >= type_info.fields.size()) {
-                    err = make_error_code(errors::invalid_type);
+                    err = make_error_code(errors::invalid_ordering);
                     return;
                 }
 
