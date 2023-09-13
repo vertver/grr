@@ -345,8 +345,8 @@ namespace grr
                     }
 
                     offset = value_offset_end + 1;
-                    auto value_string = grr::string_view(value.data() + value_offset_begin, value.data() + value_offset_end);
-                    out_value.emplace_back(grr::unstringify<value_type>(std::move(value_string), err));
+                    //auto value_string = grr::string_view(value.data() + value_offset_begin, value.data() + value_offset_end);
+                    //out_value.emplace_back(grr::unstringify<value_type>(std::move(value_string), err));
                 }
             }
 

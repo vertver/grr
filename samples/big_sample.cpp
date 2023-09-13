@@ -49,12 +49,14 @@ public:
 
 void run_big_sample()
 {
-	auto visit_fields = []<typename T>(const T& field, const char* name) {
-		if constexpr (std::is_integral_v<T>) {
+	auto visit_fields = [](const auto& field, const char* name) {
+		using CleanType = grr::clean_type<decltype(field)>;
+
+		if constexpr (std::is_integral_v<CleanType>) {
 			std::cout << "    " << name << ": " << std::to_string(field) << std::endl;
-		} else if constexpr (std::is_same_v<T, grr::string>) {
+		} else if constexpr (std::is_same_v<CleanType, grr::string>) {
 			std::cout << "    " << name << ": " << field << std::endl;
-		} else if constexpr (grr::is_fallback_type_v<T>) {
+		} else if constexpr (grr::is_fallback_type_v<CleanType>) {
 			constexpr grr::type_id vector_typeid = grr::obtain_id<int_vector>();
 			if (vector_typeid == field.second.second) {
 				const int_vector* my_vector = reinterpret_cast<const int_vector*>(field.second.first);
@@ -100,7 +102,9 @@ void run_big_sample()
 
 	std::cout << std::endl;
 	std::uint64_t b_fields_count = 0;
-	grr::visit(context, b, err, [&b_fields_count]<typename T>(const T& field, const char* name) {
+	grr::visit(context, b, err, [&b_fields_count](const auto& field, const char* name) {
+		using CleanType = grr::clean_type<decltype(field)>;
+
 		std::cout << name << std::endl;
 		b_fields_count++;
 	});
@@ -115,9 +119,11 @@ void run_big_sample()
 
 	char runtime_type_data[64] = {};
 	grr::construct(context, runtime_type_data, custom_type.id, err);
-	grr::visit(context, runtime_type_data, custom_type.id, err, []<typename T>(T& field, const char* name) {
-		if constexpr (!grr::is_fallback_type_v<T>) {
-			if constexpr (std::is_same_v<T, grr::string>) {
+	grr::visit(context, runtime_type_data, custom_type.id, err, [](const auto& field, const char* name) {
+		using CleanType = grr::clean_type<decltype(field)>;
+
+		if constexpr (!grr::is_fallback_type_v<CleanType>) {
+			if constexpr (std::is_same_v<CleanType, grr::string>) {
 				field = "Test runtime string";
 			}
 		}
@@ -151,7 +157,7 @@ void run_another_test()
 {
     constexpr auto type_name = grr::type_name<std::string>();
     constexpr auto stype_name = grr::type_name<another_reflected_struct>();
-	constexpr auto type_hash = grr::serializable_hash<grr::type_id>(type_name);
+	constexpr auto type_hash = grr::binhash<grr::type_id>(type_name);
     std::cout << type_name << std::endl;
     std::cout << type_hash << std::endl;
 }

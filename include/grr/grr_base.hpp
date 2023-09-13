@@ -347,8 +347,8 @@ namespace grr
     }
 
     
-    template<typename T, std::size_t recursion_level = 0>
-    static inline void visit(const grr::context& ctx, T& data, std::error_code& err, auto&& func)
+    template<typename T, std::size_t recursion_level = 0, typename Function>
+    static inline void visit(const grr::context& ctx, T& data, std::error_code& err, Function&& func)
     {
         auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
             using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
@@ -412,8 +412,8 @@ namespace grr
     namespace detail
     {
 
-        template<typename T>
-        static constexpr void visit_static(auto data, type_id id, const char* name, bool& called, auto&& func)
+        template<typename T, typename Function, typename Data>
+        static constexpr void visit_static(Data data, type_id id, const char* name, bool& called, Function&& func)
         {
             using CleanDataType = std::remove_pointer_t<decltype(data)>;
             auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
@@ -525,24 +525,24 @@ namespace grr
             }
         }
 
-        template<typename... Types>
-        static constexpr bool visit_static(auto data, const char* name, type_id id, auto&& func)
+        template<typename... Types, typename Function, typename Data>
+        static constexpr bool visit_static(Data data, const char* name, type_id id, Function&& func)
         {
             bool called = false;
             (visit_static<Types>(data, id, name, called, func), ...);
             return called;
         }
 
-        template<typename... Types>
-        static constexpr bool visit_static(auto data, type_id id, auto&& func)
+        template<typename... Types, typename Function, typename Data>
+        static constexpr bool visit_static(Data data, type_id id, Function&& func)
         {
             bool called = false;
             (visit_static<Types>(data, id, "var", called, func), ...);
             return called;
         }
 
-        template<typename T> 
-        static constexpr void visit_static_reflectable(const grr::context& ctx, type_id id, auto data, auto&& func, bool& called)
+        template<typename T, typename Function, typename Data>
+        static constexpr void visit_static_reflectable(const grr::context& ctx, type_id id, Data data, Function&& func, bool& called)
         {
             using CleanType = grr::clean_type<T>;
             if constexpr (grr::is_reflectable_v<CleanType>) {
@@ -559,16 +559,16 @@ namespace grr
             }
         }
 
-        template<typename... Types>
-        static constexpr bool visit_static_reflectable(const grr::context& ctx, type_id id, auto data, auto&& func)
+        template<typename... Types, typename Function, typename Data>
+        static constexpr bool visit_static_reflectable(const grr::context& ctx, type_id id, Data data, Function&& func)
         {
             bool called = false;
             (visit_static_reflectable<Types>(ctx, id, data, func, called), ...);
             return called;
         }
 
-        template<std::size_t recursion_level = 0>
-        static inline void visit(const grr::context& ctx, auto data, type_id id, std::error_code& err, auto&& func)
+        template<std::size_t recursion_level = 0, typename Function, typename Data>
+        static inline void visit(const grr::context& ctx, Data data, type_id id, std::error_code& err, Function&& func)
         {
             // [](auto& field, const char* name)
             auto call_function = [](auto&& func, auto ptr, auto id, auto size) -> bool {
@@ -656,8 +656,8 @@ namespace grr
         }
     }
 
-    template<std::size_t recursion_level = 0>
-    static inline void visit(const grr::context& ctx, auto data, type_id id, std::error_code& err, auto&& func)
+    template<std::size_t recursion_level = 0, typename Function, typename Data>
+    static inline void visit(const grr::context& ctx, Data data, type_id id, std::error_code& err, Function&& func)
     {
         if (!ctx.contains(id)) {
             err = make_error_code(errors::unregistered_id);
