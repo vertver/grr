@@ -193,12 +193,12 @@ namespace grr
     {
         static constexpr bool exists = true;
 
-        static inline grr::type_id id()
+        static inline grr::typeid_t id()
         {
             return grr::obtain_id("custom_type");
         }
 
-        static inline bool verify_id(grr::type_id cmp_id)
+        static inline bool verify_id(grr::typeid_t cmp_id)
         {
             return (id() == cmp_id);
         }

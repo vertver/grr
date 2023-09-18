@@ -39,10 +39,11 @@ namespace grr
 
     using string = GRR_STRING;
     using string_view = GRR_STRING_VIEW;
-    using type_id = GRR_TYPE_ID;
+    using typeid_t = GRR_TYPE_ID;
+    using tag_t = GRR_TYPE_TAG;
 
-    using ptr_pair = std::pair<std::uint64_t, std::pair<void*, type_id>>;
-    using const_ptr_pair = std::pair<std::uint64_t, std::pair<const void*, type_id>>;
+    using ptr_pair = std::pair<std::uint64_t, std::pair<void*, typeid_t>>;
+    using const_ptr_pair = std::pair<std::uint64_t, std::pair<const void*, typeid_t>>;
 }
 
 #ifndef GRR_MSVC_TYPES
@@ -153,7 +154,7 @@ namespace grr
     constexpr bool is_container_v = is_container<T>::value;	
 
     template<class T>
-    using clean_type = std::remove_reference_t<std::remove_cv_t<T>>;
+    using clean_type = std::remove_const_t<std::remove_reference_t<std::remove_cv_t<T>>>;
 
     template<typename T>
     constexpr bool is_container_not_string_v = is_container<T>::value && !std::is_same_v<grr::clean_type<T>, grr::string>;

@@ -50,11 +50,14 @@ namespace grr
 
     struct field
     {
-        GRR_CONSTEXPR field(const char* new_name, type_id new_id, std::size_t new_offset)
-            : name(new_name), id(new_id), offset(new_offset) {}
+        GRR_CONSTEXPR field(const char* new_name, typeid_t new_id, std::size_t new_offset, const vector<tag_t>& new_tags)
+            : name(new_name), id(new_id), offset(new_offset), tags(new_tags) {}
 
-        GRR_CONSTEXPR field(const string_view& new_name, type_id new_id, std::size_t new_offset)
-            : name(new_name), id(new_id), offset(new_offset) {}
+        GRR_CONSTEXPR field(const string_view& new_name, typeid_t new_id, std::size_t new_offset, const vector<tag_t>& new_tags)
+            : name(new_name), id(new_id), offset(new_offset), tags(new_tags) {}
+
+        GRR_CONSTEXPR field(string_view&& new_name, typeid_t&& new_id, std::size_t&& new_offset, vector<tag_t>&& new_tags)
+            : name(new_name), id(new_id), offset(new_offset), tags(new_tags) {}
 
         field() = default;
         field(const field&) = default;
@@ -63,36 +66,38 @@ namespace grr
         field& operator=(field&&) = default;
 
         std::size_t offset;
-        type_id id;
+        typeid_t id;
         string name;
+        vector<tag_t> tags;
     };
 
     struct type_context
     {
-        type_id base_type;
+        typeid_t base_type;
         std::size_t size;
         string name;
+        vector<tag_t> tags;
         vector<field> fields;
     };
 
     class context
     {
     private:
-        using storage_map = hash_map<type_id, type_context>;
-        hash_map<type_id, type_context> storage;
+        using storage_map = hash_map<typeid_t, type_context>;
+        hash_map<typeid_t, type_context> storage;
 
     public:
-        type_context& at(type_id id)
+        type_context& at(typeid_t id)
         {
             return storage.at(id);
         }
 
-        const type_context& at(type_id id) const
+        const type_context& at(typeid_t id) const
         {
             return storage.at(id);
         }
 
-        bool contains(type_id id) const
+        bool contains(typeid_t id) const
         {
 #ifdef GRR_CXX20
             return storage.contains(id);
@@ -101,7 +106,7 @@ namespace grr
 #endif
         }
 
-        std::size_t size(type_id id) const
+        std::size_t size(typeid_t id) const
         {
             const auto& it = storage.find(id);
             if (it == storage.end()) {
@@ -111,7 +116,7 @@ namespace grr
             return it->second.size;
         }
 
-        const type_context& obtain(type_id id) const
+        const type_context& obtain(typeid_t id) const
         {
             return storage.at(id);
         }
@@ -126,7 +131,7 @@ namespace grr
             return storage.end();
         }
 
-        void rename(type_id id, const char* new_name, std::error_code& err)
+        void rename(typeid_t id, const char* new_name, std::error_code& err)
         {
             const auto& it = storage.find(id);
             if (it == storage.end()) {
@@ -137,7 +142,7 @@ namespace grr
             it->second.name = new_name;
         }
 
-        void rename(type_id id, const string_view& new_name, std::error_code& err)
+        void rename(typeid_t id, const string_view& new_name, std::error_code& err)
         {
             const auto& it = storage.find(id);
             if (it == storage.end()) {
@@ -148,34 +153,54 @@ namespace grr
             it->second.name = string(new_name.begin(), new_name.end());
         }
 
-        void add(type_id id, const type_context& type)
+        void emplace(typeid_t id, const type_context& type)
         {
             storage.emplace(std::make_pair(id, type));
         }
 
-        void add(type_id id, type_context&& type)
+        void emplace(typeid_t id, type_context&& type)
         {
             storage.emplace(std::make_pair(id, type));
+        }
+
+        void erase(typeid_t id)
+        {
+            storage.erase(id);
         }
     };
 
     template<typename T>
+    static constexpr bool reflectable()
+    {
+        return grr::is_reflectable_v<T>;
+    }
+
+    static inline bool reflectable(const grr::context& ctx, grr::typeid_t id)
+    {
+        if (!ctx.contains(id)) {
+            return false;
+        }
+
+        return !ctx.at(id).fields.empty();
+    }
+
+    template<typename T>
     static constexpr auto type_name()
     {
-        if constexpr (grr::is_reflectable_v<T>) {
+        if constexpr (reflectable<T>()) {
             return nameof::nameof_short_type<T>();
         } else {
             return nameof::nameof_type<T>();
         }
     }
 
-    static inline const char* type_name(const context& ctx, type_id id)
+    static inline string_view type_name(const context& ctx, typeid_t id)
     {
         if (!ctx.contains(id)) {
             return "";
         }
 
-        return ctx.at(id).name.c_str();
+        return string_view(ctx.at(id).name.begin(), ctx.at(id).name.end());
     }
 
     template<typename T>
@@ -210,18 +235,18 @@ namespace grr
         return hash;
     }
 
-    static constexpr type_id obtain_id(const grr::string_view& name)
+    static constexpr typeid_t obtain_id(const grr::string_view& name)
     {
-        return binhash<type_id>(name);
+        return binhash<typeid_t>(name);
     }
 
     template<typename T>
-    static constexpr type_id obtain_id()
+    static constexpr typeid_t obtain_id()
     {
         return obtain_id(type_name<grr::clean_type<T>>());
     }
 
-    static inline std::size_t size(const context& ctx, type_id id)
+    static inline std::size_t size(const context& ctx, typeid_t id)
     {
         return ctx.size(id);
     }
@@ -229,16 +254,16 @@ namespace grr
     template<typename T>
     static inline bool contains(const context& ctx)
     {
-        constexpr type_id id = obtain_id<grr::clean_type<T>>();
+        constexpr typeid_t id = obtain_id<grr::clean_type<T>>();
         return ctx.contains(id);
     }
 
-    static inline bool contains(const context& ctx, type_id id)
+    static inline bool contains(const context& ctx, typeid_t id)
     {
         return ctx.contains(id);
     }
 
-    static inline void rename(context& ctx, type_id id, std::size_t field_idx, const char* new_name, std::error_code& err)
+    static inline void rename(context& ctx, typeid_t id, std::size_t field_idx, const char* new_name, std::error_code& err)
     {
         if (!ctx.contains(id)) {
             err = make_error_code(errors::unregistered_id);
@@ -254,7 +279,7 @@ namespace grr
         fields.at(field_idx).name = new_name;
     }
 
-    static inline void rename(context& ctx, type_id id, std::size_t field_idx, const string_view& new_name, std::error_code& err)
+    static inline void rename(context& ctx, typeid_t id, std::size_t field_idx, const string_view& new_name, std::error_code& err)
     {
         if (!ctx.contains(id)) {
             err = make_error_code(errors::unregistered_id);
@@ -270,17 +295,17 @@ namespace grr
         fields.at(field_idx).name = string(new_name.begin(), new_name.end());
     }
 
-    static inline void rename(context& ctx, type_id id, const char* new_name, std::error_code& err)
+    static inline void rename(context& ctx, typeid_t id, const char* new_name, std::error_code& err)
     {
         ctx.rename(id, new_name, err);
     }
 
-    static inline void rename(context& ctx, type_id id, const string_view& new_name, std::error_code& err)
+    static inline void rename(context& ctx, typeid_t id, const string_view& new_name, std::error_code& err)
     {
         ctx.rename(id, new_name, err);
     }
 
-    static inline std::size_t offset(const context& ctx, type_id id, std::size_t field_idx, std::error_code& err)
+    static inline std::size_t offset(const context& ctx, typeid_t id, std::size_t field_idx, std::error_code& err)
     {
         if (!ctx.contains(id)) {
             err = make_error_code(errors::unregistered_id);
@@ -296,13 +321,13 @@ namespace grr
         return fields.at(field_idx).offset;
     }
 
-    static inline type_id base_type(context& ctx, type_id id)
+    static inline typeid_t base_type(context& ctx, typeid_t id)
     {
         return ctx.at(id).base_type;
     }
 
     template<typename T>
-    static constexpr type_id base_type()
+    static constexpr typeid_t base_type()
     {
         return obtain_id<std::remove_pointer_t<grr::clean_type<T>>>();
     }
@@ -310,14 +335,14 @@ namespace grr
     template<typename T>
     static inline void rename(context& ctx, std::size_t field_idx, const string_view& new_name, std::error_code& err)
     {
-        constexpr type_id id = obtain_id<grr::clean_type<T>>();
+        constexpr typeid_t id = obtain_id<grr::clean_type<T>>();
         rename(ctx, id, field_idx, new_name, err);
     }
 
     template<typename T>
     static inline void rename(context& ctx, std::size_t field_idx, const char* new_name, std::error_code& err)
     {
-        constexpr type_id id = obtain_id<grr::clean_type<T>>();
+        constexpr typeid_t id = obtain_id<grr::clean_type<T>>();
         rename(ctx, id, field_idx, new_name, err);
     }
 
@@ -342,7 +367,7 @@ namespace grr
     template<typename T>
     static inline std::size_t offset(const context& ctx, std::size_t field_idx, std::error_code& err)
     {
-        constexpr type_id id = obtain_id<grr::clean_type<T>>();
+        constexpr typeid_t id = obtain_id<grr::clean_type<T>>();
         return offset(ctx, id, field_idx, err);
     }
 
@@ -373,7 +398,7 @@ namespace grr
             }
         };
 
-        constexpr type_id id = grr::obtain_id<T>();
+        constexpr typeid_t id = grr::obtain_id<T>();
         using CleanType = grr::clean_type<T>;
         if (!ctx.contains(id)) {
             err = make_error_code(errors::unregistered_id);
@@ -411,9 +436,8 @@ namespace grr
 
     namespace detail
     {
-
         template<typename T, typename Function, typename Data>
-        static constexpr void visit_static(Data data, type_id id, const char* name, bool& called, Function&& func)
+        static constexpr void visit_static(Data data, typeid_t id, const char* name, bool& called, Function&& func)
         {
             using CleanDataType = std::remove_pointer_t<decltype(data)>;
             auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
@@ -444,10 +468,10 @@ namespace grr
                 return;
             }
 
-            constexpr type_id current_ptr_id = grr::obtain_id<T*>();
+            constexpr typeid_t current_ptr_id = grr::obtain_id<T*>();
 
             if constexpr (!std::is_same_v<T, void>) {
-                constexpr type_id current_id = grr::obtain_id<T>();
+                constexpr typeid_t current_id = grr::obtain_id<T>();
                 if (current_id == id) {
                     if constexpr (std::is_const_v<CleanDataType>) {
                         called = call_function(func, reinterpret_cast<const T*>(data), name);
@@ -460,8 +484,8 @@ namespace grr
                     return;
                 }
 
-                constexpr type_id vector_id = grr::obtain_id<grr::vector<grr::vector<T>>>();
-                constexpr type_id vectored_vector_id = grr::obtain_id<grr::vector<T>>();
+                constexpr typeid_t vector_id = grr::obtain_id<grr::vector<grr::vector<T>>>();
+                constexpr typeid_t vectored_vector_id = grr::obtain_id<grr::vector<T>>();
                 if (id == vector_id) {
                     if constexpr (std::is_const_v<CleanDataType>) {
                         called = call_function(func, reinterpret_cast<const grr::vector<T>*>(reinterpret_cast<size_t>(data)), name);
@@ -500,8 +524,8 @@ namespace grr
                 return;
             }
 
-            constexpr type_id vector_ptr_id = grr::obtain_id<grr::vector<grr::vector<T*>>>();
-            constexpr type_id vectored_vector_ptr_id = grr::obtain_id<grr::vector<T*>>();
+            constexpr typeid_t vector_ptr_id = grr::obtain_id<grr::vector<grr::vector<T*>>>();
+            constexpr typeid_t vectored_vector_ptr_id = grr::obtain_id<grr::vector<T*>>();
             if (id == vector_ptr_id) {
                 if constexpr (std::is_const_v<CleanDataType>) {
                     called = call_function(func, reinterpret_cast<const grr::vector<T*>*>(reinterpret_cast<size_t>(data)), name);
@@ -526,7 +550,7 @@ namespace grr
         }
 
         template<typename... Types, typename Function, typename Data>
-        static constexpr bool visit_static(Data data, const char* name, type_id id, Function&& func)
+        static constexpr bool visit_static(Data data, const char* name, typeid_t id, Function&& func)
         {
             bool called = false;
             (visit_static<Types>(data, id, name, called, func), ...);
@@ -534,7 +558,7 @@ namespace grr
         }
 
         template<typename... Types, typename Function, typename Data>
-        static constexpr bool visit_static(Data data, type_id id, Function&& func)
+        static constexpr bool visit_static(Data data, typeid_t id, Function&& func)
         {
             bool called = false;
             (visit_static<Types>(data, id, "var", called, func), ...);
@@ -542,7 +566,7 @@ namespace grr
         }
 
         template<typename T, typename Function, typename Data>
-        static constexpr void visit_static_reflectable(const grr::context& ctx, type_id id, Data data, Function&& func, bool& called)
+        static constexpr void visit_static_reflectable(const grr::context& ctx, typeid_t id, Data data, Function&& func, bool& called)
         {
             using CleanType = grr::clean_type<T>;
             if constexpr (grr::is_reflectable_v<CleanType>) {
@@ -560,7 +584,7 @@ namespace grr
         }
 
         template<typename... Types, typename Function, typename Data>
-        static constexpr bool visit_static_reflectable(const grr::context& ctx, type_id id, Data data, Function&& func)
+        static constexpr bool visit_static_reflectable(const grr::context& ctx, typeid_t id, Data data, Function&& func)
         {
             bool called = false;
             (visit_static_reflectable<Types>(ctx, id, data, func, called), ...);
@@ -568,7 +592,7 @@ namespace grr
         }
 
         template<std::size_t recursion_level = 0, typename Function, typename Data>
-        static inline void visit(const grr::context& ctx, Data data, type_id id, std::error_code& err, Function&& func)
+        static inline void visit(const grr::context& ctx, Data data, typeid_t id, std::error_code& err, Function&& func)
         {
             // [](auto& field, const char* name)
             auto call_function = [](auto&& func, auto ptr, auto id, auto size) -> bool {
@@ -626,7 +650,7 @@ namespace grr
 
                 for (const auto& cfield : type_info.fields) {
                     auto field_ptr = data;
-                    const type_id field_id = cfield.id;
+                    const typeid_t field_id = cfield.id;
                     if constexpr (std::is_const_v<std::remove_pointer_t<decltype(data)>>) {
                         field_ptr = static_cast<const char*>(data) + cfield.offset;
                     } else {
@@ -657,7 +681,7 @@ namespace grr
     }
 
     template<std::size_t recursion_level = 0, typename Function, typename Data>
-    static inline void visit(const grr::context& ctx, Data data, type_id id, std::error_code& err, Function&& func)
+    static inline void visit(const grr::context& ctx, Data data, typeid_t id, std::error_code& err, Function&& func)
     {
         if (!ctx.contains(id)) {
             err = make_error_code(errors::unregistered_id);
@@ -682,7 +706,7 @@ namespace grr
         memory_to_construct->~T();
     }
 
-    static inline void construct(const grr::context& ctx, void* memory_to_construct, type_id id, std::error_code& err)
+    static inline void construct(const grr::context& ctx, void* memory_to_construct, typeid_t id, std::error_code& err)
     {
         grr::visit(ctx, memory_to_construct, id, err, [](auto& field) {
             using CleanType = grr::clean_type<decltype(field)>;
@@ -692,7 +716,7 @@ namespace grr
         });
     }
 
-    static inline void destruct(const grr::context& ctx, void* memory_to_destruct, type_id id, std::error_code& err)
+    static inline void destruct(const grr::context& ctx, void* memory_to_destruct, typeid_t id, std::error_code& err)
     {
         grr::visit(ctx, memory_to_destruct, id, err, [](auto& field) {
             using CleanType = grr::clean_type<decltype(field)>;
@@ -701,7 +725,7 @@ namespace grr
             }
         });
     }
-        
+
     class type_declaration
     {
     public:
@@ -710,38 +734,11 @@ namespace grr
         std::int64_t index;
         std::size_t size;
         string name;
-        type_id id;
+        typeid_t id;
         vector<field> fields;
+        vector<tag_t> tags;
 
-        GRR_CONSTEXPR type_declaration() = delete;
-        GRR_CONSTEXPR type_declaration(type_declaration&) = delete;
-        GRR_CONSTEXPR type_declaration(const type_declaration&) = delete;
-        GRR_CONSTEXPR type_declaration(type_declaration&&) = default;
-
-        GRR_CONSTEXPR type_declaration(const context& in_context, type_id in_id, const char* type_name) noexcept
-            : ctx(&in_context), name(type_name), id(in_id), size(0), index(-1) {}
-
-        GRR_CONSTEXPR type_declaration(const context& in_context, type_id in_id, const string_view& type_name) noexcept
-            : ctx(&in_context), name(type_name.begin(), type_name.end()), id(in_id), size(0), index(-1) {}
-
-        GRR_CONSTEXPR type_declaration(const context& in_context, type_id in_id, const char* type_name, std::size_t new_size) noexcept
-            : ctx(&in_context), name(type_name), id(in_id), size(new_size), index(-1) {}
-
-        GRR_CONSTEXPR type_declaration(const context& in_context, type_id in_id, const string_view& type_name, std::size_t new_size) noexcept
-            : ctx(&in_context), name(type_name.begin(), type_name.end()), id(in_id), size(new_size), index(-1) {}
-
-        GRR_CONSTEXPR type_declaration(const context& in_context, const char* type_name) noexcept
-            : ctx(&in_context), name(type_name), id(obtain_id(type_name)), size(0), index(-1) {}
-        
-        GRR_CONSTEXPR type_declaration(const context& in_context, const string_view& type_name) noexcept
-            : ctx(&in_context), name(type_name.begin(), type_name.end()), id(obtain_id(type_name)), size(0), index(-1) {}
-        
-        GRR_CONSTEXPR type_declaration(const context& in_context, const char* type_name, std::size_t new_size) noexcept
-            : ctx(&in_context), name(type_name), id(obtain_id(type_name)), size(new_size), index(-1) {}
-        
-        GRR_CONSTEXPR type_declaration(const context& in_context, const string_view& type_name, std::size_t new_size) noexcept
-            : ctx(&in_context), name(type_name.begin(), type_name.end()), id(obtain_id(type_name)), size(new_size), index(-1) {}
-
+    private:
         bool field_erase(const char* field_name)
         {
             const auto field_hash = binhash<std::uint32_t>(field_name);
@@ -766,29 +763,83 @@ namespace grr
             return true;
         }
 
+    public:
+        GRR_CONSTEXPR type_declaration() = delete;
+        GRR_CONSTEXPR type_declaration(type_declaration&) = delete;
+        GRR_CONSTEXPR type_declaration(const type_declaration&) = delete;
+        GRR_CONSTEXPR type_declaration(type_declaration&&) = default;
+
+        GRR_CONSTEXPR type_declaration(const context& in_context, const string_view& type_name) noexcept
+            : ctx(&in_context), name(type_name.begin(), type_name.end()), id(obtain_id(type_name)), size(0), index(-1) {}
+
+        GRR_CONSTEXPR type_declaration(const context& in_context, const string_view& type_name, std::size_t new_size) noexcept
+            : ctx(&in_context), name(type_name.begin(), type_name.end()), id(obtain_id(type_name)), size(new_size), index(-1) {}
+
+        GRR_CONSTEXPR type_declaration(const context& in_context, typeid_t in_id, const string_view& type_name) noexcept
+            : ctx(&in_context), name(type_name.begin(), type_name.end()), id(in_id), size(0), index(-1) {}
+
+        GRR_CONSTEXPR type_declaration(const context& in_context, typeid_t in_id, const string_view& type_name, std::size_t new_size) noexcept
+            : ctx(&in_context), name(type_name.begin(), type_name.end()), id(in_id), size(new_size), index(-1) {}
+
+        void emplace(const char* field_name, grr::typeid_t id, std::error_code& err)
+        {
+            if (!grr::contains(*ctx, id)) {
+                err = make_error_code(errors::unregistered_id);
+                return;
+            }
+
+            const std::size_t offset = fields.empty() ? 0 : fields.back().offset + grr::size(*ctx, fields.back().id);
+            fields.emplace_back(std::move(field(field_name, id, offset, {})));
+        }
+
         template<typename T>
         void emplace(const char* field_name, std::error_code& err)
         {
-            constexpr type_id current_id = obtain_id<T>();
+            constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
                 err = make_error_code(errors::unregistered_id);
                 return;
             }
 
             const std::size_t offset = fields.empty() ? 0 : fields.back().offset + grr::size(*ctx, fields.back().id);
-            fields.emplace_back(std::move(field(field_name, current_id, offset)));
-        }
-
+            fields.emplace_back(std::move(field(field_name, current_id, offset, {})));
+        }     
+        
         template<typename T>
-        void emplace(const char* field_name, std::size_t offset, std::error_code& err)
+        void emplace(const char* field_name, const vector<tag_t>& tags, std::error_code& err)
         {
-            constexpr type_id current_id = obtain_id<T>();
+            constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
                 err = make_error_code(errors::unregistered_id);
                 return;
             }
 
-            fields.emplace_back(std::move(field(field_name, current_id, offset)));
+            const std::size_t offset = fields.empty() ? 0 : fields.back().offset + grr::size(*ctx, fields.back().id);
+            fields.emplace_back(std::move(field(field_name, current_id, offset, tags)));
+        }
+
+        template<typename T>
+        void emplace(const char* field_name, std::size_t offset, std::error_code& err)
+        {
+            constexpr typeid_t current_id = obtain_id<T>();
+            if (!grr::contains(*ctx, current_id)) {
+                err = make_error_code(errors::unregistered_id);
+                return;
+            }
+
+            fields.emplace_back(std::move(field(field_name, current_id, offset, {})));
+        }
+                
+        template<typename T>
+        void emplace(const char* field_name, std::size_t offset, const vector<tag_t>& tags, std::error_code& err)
+        {
+            constexpr typeid_t current_id = obtain_id<T>();
+            if (!grr::contains(*ctx, current_id)) {
+                err = make_error_code(errors::unregistered_id);
+                return;
+            }
+
+            fields.emplace_back(std::move(field(field_name, current_id, offset, tags)));
         }
 
         void erase(std::size_t idx, std::error_code& err)
@@ -808,6 +859,28 @@ namespace grr
         }
     };
 
+    static inline void remove_type(context& ctx, typeid_t id, std::error_code& err)
+    {
+        if (!ctx.contains(id)) {
+            err = make_error_code(errors::unregistered_id);
+            return;
+        }
+
+        ctx.erase(id);
+    }  
+    
+    template<typename T>
+    static inline void remove_type(context& ctx, std::error_code& err)
+    {
+        constexpr typeid_t current_id = obtain_id<T>();
+        if (!ctx.contains(current_id)) {
+            err = make_error_code(errors::unregistered_id);
+            return;
+        }
+
+        ctx.erase(current_id);
+    }
+
     static inline void add_type(context& ctx, const type_declaration& type, std::error_code& err)
     {
         if (ctx.contains(type.id)) {
@@ -815,17 +888,17 @@ namespace grr
             return;
         }
 
-        ctx.add(type.id, std::move(type_context{ type.id, type.size, type.name, type.fields }));
+        ctx.emplace(type.id, std::move(type_context{ type.id, type.size, type.name, type.tags, type.fields }));
     }
 
-    static inline void add_type(context& ctx, const type_declaration& type, type_id base_type, std::error_code& err)
+    static inline void add_type(context& ctx, const type_declaration& type, typeid_t base_type, std::error_code& err)
     {
         if (ctx.contains(type.id)) {
             err = make_error_code(errors::already_registered);
             return;
         }
 
-        ctx.add(type.id, std::move(type_context{ base_type, type.size, type.name, type.fields }));
+        ctx.emplace(type.id, std::move(type_context{ base_type, type.size, type.name, type.tags, type.fields }));
     }
 
     template<typename BaseType>
@@ -836,7 +909,7 @@ namespace grr
             return;
         }
 
-        ctx.add(type.id, std::move(type_context{ obtain_id<BaseType>(), type.size, type.name, type.fields }));
+        ctx.emplace(type.id, std::move(type_context{ obtain_id<BaseType>(), type.size, type.name, type.tags, type.fields }));
     }
 
     template<typename T> 

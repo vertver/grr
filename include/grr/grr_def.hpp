@@ -10,6 +10,10 @@
 #define GRR_TYPE_ID std::uint64_t
 #endif
 
+#ifndef GRR_TYPE_TAG
+#define GRR_TYPE_TAG std::uint64_t
+#endif
+
 #ifndef GRR_INVALID_SIZE
 #define GRR_INVALID_SIZE static_cast<std::size_t>(-1)
 #endif
