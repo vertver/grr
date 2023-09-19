@@ -26,6 +26,8 @@ namespace grr
             static const char* err_msg[] =
             {
                 "Invalid argument",
+                "Invalid type",
+                "Invalid ordering",
                 "Unregisted ID",
                 "Already registered",
                 "Parsing failed",
