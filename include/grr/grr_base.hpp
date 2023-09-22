@@ -265,6 +265,11 @@ namespace grr
         return ctx.contains(id);
     }
 
+    static inline bool contains(const context& ctx, const grr::string_view& name)
+    {
+        return ctx.contains(binhash<typeid_t>(name));
+    }
+
     static inline void rename(context& ctx, typeid_t id, std::size_t field_idx, const char* new_name, std::error_code& err)
     {
         if (!ctx.contains(id)) {
@@ -699,7 +704,7 @@ namespace grr
     template<typename T, typename... Args>
     static inline void construct(T* memory_to_construct, Args... args)
     {
-        *memory_to_construct = T(args...);
+        new (memory_to_construct) T(args...);
     }
 
     template<typename T, typename... Args>
