@@ -377,11 +377,12 @@ namespace grr
         constexpr typeid_t id = obtain_id<grr::clean_type<T>>();
         return offset(ctx, id, field_idx, err);
     }
-
     
-    template<typename T, std::size_t recursion_level = 0, typename Function>
+    template<typename T, typename Function>
     static inline void visit(const grr::context& ctx, T& data, std::error_code& err, Function&& func)
     {
+        using CleanType = grr::clean_type<T>;
+
         auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
             using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
             constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference>;
@@ -406,21 +407,19 @@ namespace grr
         };
 
         constexpr typeid_t id = grr::obtain_id<T>();
-        using CleanType = grr::clean_type<T>;
         if (!ctx.contains(id)) {
             err = make_error_code(errors::unregistered_id);
             return;
         }
 
         const auto& type_info = ctx.at(id);
-        if constexpr (pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
-            if (type_info.fields.empty()) {
-                err = make_error_code(errors::invalid_type);
-                return;
-            }
+        if (type_info.fields.empty()) {
+            err = make_error_code(errors::invalid_type);
+            return;
+        }
 
-            std::size_t index = 0;
-            pfr::for_each_field(data, [&err, &index, &type_info, &call_function, &func](auto& field) {
+        if constexpr (pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
+            pfr::for_each_field(data, [&err, &type_info, &call_function, &func](auto& field, std::size_t index) {
                 if (err || index >= type_info.fields.size()) {
                     err = make_error_code(errors::invalid_ordering);
                     return;
@@ -434,10 +433,65 @@ namespace grr
 
                 call_function(func, &field, field_info.name.c_str());
                 index++;
+                });
+        } else {
+            err = make_error_code(errors::invalid_type);
+        }
+    }
+
+    template<typename T, typename Function>
+    static inline void visit_raw(const grr::context& ctx, T& data, std::error_code& err, Function&& func)
+    {
+        using CleanType = grr::clean_type<T>;
+        constexpr bool is_visitable = visit_struct::traits::is_visitable<CleanType>::value;
+        constexpr bool is_reflectable = pfr::is_implicitly_reflectable_v<CleanType, CleanType>;
+        if constexpr (is_visitable) {
+            constexpr std::size_t fields_count = visit_struct::field_count<CleanType>();
+            static_assert(
+                pfr::tuple_size_v<CleanType> == fields_count,
+                "Invalid field count in struct. Please, verify that everything is fine with your GRR_REFLECT declarations"
+            );
+        }
+        
+        auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
+            using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
+            constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference>;
+            constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference, const char*>;
+            constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference>;
+            constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference, const char*>;
+            static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not accepted");
+
+            if constexpr (callable_1) {
+                return func(*argument);
+            } else if constexpr (callable_2) {
+                return func(*argument, name);
+            } else if constexpr (callable_3) {
+                func(*argument);
+                return true;
+            } else if constexpr (callable_4) {
+                func(*argument, name);
+                return true;
+            } else {
+                return false;
+            }
+        };
+
+        if constexpr (is_visitable) {
+            visit_struct::for_each(data, [&call_function, &func](const char* name, auto& field) {
+                call_function(func, &field, name);
+            });
+        } else if constexpr (is_reflectable) {
+            pfr::for_each_field(data, [&data, &call_function, &func](auto& field) {
+                char name_storage[32] = {};
+                std::size_t offset = static_cast<std::size_t>(&field) - static_cast<std::size_t>(&data);
+                if (std::to_chars(name_storage, name_storage + 32, offset).ec != std::errc{}) {
+                    std::memcpy(name_storage, "name", 5);
+                }
+
+                call_function(func, &field, name_storage);
             });
         } else {
-            call_function(func, &data, "val");
-            return;
+            err = make_error_code(errors::invalid_type);
         }
     }
 
@@ -930,7 +984,14 @@ namespace grr
         if constexpr (is_aggregate) {
             constexpr bool is_visitable = visit_struct::traits::is_visitable<CleanType>::value;
             constexpr bool is_reflectable = pfr::is_implicitly_reflectable_v<CleanType, CleanType>;
-            static_assert(grr::is_reflectable_v<CleanType>, "GRR reflection supports only aggregate types (such as PODs)");
+            static_assert(grr::is_reflectable_v<CleanType>, "GRR compile-time reflection supports only aggregate types (such as PODs).");
+            if constexpr (is_visitable) {
+                constexpr std::size_t fields_count = visit_struct::field_count<CleanType>();
+                static_assert(
+                    pfr::tuple_size_v<CleanType> == fields_count,
+                    "Invalid field count in struct. Please, verify that everything is fine with your GRR_REFLECT declarations"
+                );
+            }
 
             const CleanType val = {};
             if constexpr (is_visitable) {
