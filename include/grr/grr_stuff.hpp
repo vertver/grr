@@ -40,6 +40,7 @@
 #define GRR_LIKELY
 #endif
 
+#ifdef GRR_PREDECLARE_FIELDS
 namespace grr
 {
     template<typename T>
@@ -47,5 +48,12 @@ namespace grr
         visit_struct::traits::is_visitable<T>::value ||
         pfr::is_implicitly_reflectable<T, T>::value;
 }
+#else
+namespace grr
+{
+    template<typename T>
+    constexpr bool is_reflectable_v = false;
+}
+#endif
 
 #endif
