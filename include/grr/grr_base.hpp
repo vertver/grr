@@ -1008,8 +1008,10 @@ namespace grr
                 pfr::for_each_field(val, [&err, &val, &new_type](const auto& field) {
                     const std::ptrdiff_t offset = reinterpret_cast<std::ptrdiff_t>(&field) - reinterpret_cast<std::ptrdiff_t>(&val);
                     
-                    char field_name[16] = {};
-                    std::snprintf(field_name, 16, "var%u", static_cast<std::uint32_t>(offset));
+                    char field_name[32] = {};
+                    if (std::to_chars(field_name, field_name + 32, offset).ec != std::errc{}) {
+                        std::memcpy(field_name, "name", 5);
+                    }
 
                     new_type.emplace<grr::clean_type<decltype(field)>>(field_name, offset, err);
                     if (err) {
