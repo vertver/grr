@@ -82,22 +82,22 @@ Pretty simple! There is an a example of usage:
 # TODO List:
 - Optimization
  - [ ] `grr::details::visit_static` algorithm must be optimized from O(n) to O(1)
- - [ ] Compile-time `grr::visit`
- - [ ] Fast run-time `grr::serializable_hash` 
-  - [ ] Best solution will be the deleting of `grr::serializable_hash` function and move all string operations to `grr::type_name`
+ - [x] Compile-time `grr::visit`
+ - [x] Fast run-time `grr::serializable_hash` 
+  - [x] Best solution will be the deleting of `grr::serializable_hash` function and move all string operations to `grr::type_name`
 - Bugs
  - [ ] `const void*` and `void*` don't appear in `grr::reflect` function
 - Features
  - [ ] Portable `grr::serializable_hash` between compilers
   - [ ] Custom hasher for containers because of template arguments aliasing
   - [x] Delete all platform-dependend parts in the name when hashing
-  - [ ] Make type string more serialization-friendly
+  - [x] Make type string more serialization-friendly
  - [ ] Serialization/Deserialization support
   - [ ] Binary serialization
   - [ ] String serialization
   - [ ] Custom formats support
  - [ ] Full containers support (reflect all containers with pre-defined scalar types)
- - [ ] Fields meta-data (markers, flags, etc)
+ - [x] Fields meta-data (markers, flags, etc)
 - Integrations
  - [ ] EnTT 
  - [ ] RapidJSON
