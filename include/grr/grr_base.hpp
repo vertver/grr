@@ -433,7 +433,7 @@ namespace grr
     }
 
     template<typename T, typename Function>
-    static inline void visit_raw(const grr::context& ctx, T& data, std::error_code& err, Function&& func)
+    static inline void visit_raw(T& data, std::error_code& err, Function&& func)
     {
         using CleanType = grr::clean_type<T>;
         constexpr bool is_visitable = visit_struct::traits::is_visitable<CleanType>::value;
@@ -470,18 +470,22 @@ namespace grr
         };
 
         if constexpr (is_visitable) {
-            visit_struct::for_each(data, [&call_function, &func](const char* name, auto& field) {
-                call_function(func, &field, name);
+            visit_struct::for_each(data, [&call_function, &func, &err](const char* name, auto& field) {
+                if (!call_function(func, &field, name)) {
+                    err = make_error_code(errors::invalid_argument);
+                }
             });
         } else if constexpr (is_reflectable) {
-            pfr::for_each_field(data, [&data, &call_function, &func](auto& field) {
+            pfr::for_each_field(data, [&data, &call_function, &func, &err](auto& field) {
                 char name_storage[32] = {};
                 std::size_t offset = static_cast<std::size_t>(&field) - static_cast<std::size_t>(&data);
                 if (std::to_chars(name_storage, name_storage + 32, offset).ec != std::errc{}) {
                     std::memcpy(name_storage, "name", 5);
                 }
 
-                call_function(func, &field, name_storage);
+                if (call_function(func, &field, name_storage)) {
+                    err = make_error_code(errors::invalid_argument);
+                }
             });
         } else {
             err = make_error_code(errors::invalid_type);
