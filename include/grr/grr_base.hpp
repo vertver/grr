@@ -344,20 +344,6 @@ namespace grr
     }
 
     template<typename T>
-    static inline void rename(context& ctx, std::size_t field_idx, const string_view& new_name, std::error_code& err)
-    {
-        constexpr typeid_t id = obtain_id<grr::clean_type<T>>();
-        rename(ctx, id, field_idx, new_name, err);
-    }
-
-    template<typename T>
-    static inline void rename(context& ctx, std::size_t field_idx, const char* new_name, std::error_code& err)
-    {
-        constexpr typeid_t id = obtain_id<grr::clean_type<T>>();
-        rename(ctx, id, field_idx, new_name, err);
-    }
-
-    template<typename T>
     static inline bool size(const context& ctx)
     {
         return ctx.size(obtain_id<grr::clean_type<T>>());
@@ -941,7 +927,7 @@ namespace grr
             return;
         }
 
-        ctx.erase(current_id);
+        ctx.erase(current_id, err);
     }
 
     static inline void add_type(context& ctx, const type_declaration& type, std::error_code& err)
