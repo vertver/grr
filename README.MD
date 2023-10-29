@@ -9,7 +9,9 @@ GRR is a **very** experimental library. You can use it in your project, but it i
 # How does it works?
 GRR uses multiple techniques to obtain information about structure on compilation time. 
 The first reflection method was described by [Anton Polukhin](https://github.com/apolukhin) at [Meeting C++ 2018](https://www.youtube.com/watch?v=UlNUNxLtBI0). This reflection method works through C++14 hack, which allows to represent a structure as `std::tuple`, which allows to access fields of the structure through indexes. The limitation of this method is the lack of field name information and the ability to work only with C-like structure (or otherwise PODs).
+
 The second method was implemented by [cbeck88](https://github.com/cbeck88) in [visit_struct](https://github.com/cbeck88/visit_struct) library, and it works from C++11 and higher. This method of reflection has the same advantages as the first one, with the only difference that we have access to the names of the structure and its fields. The disadvantage of this method is that it is necessary to create the structure through special macros or use a special `VISITABLE_STRUCT` macro to define all the fields of the structure.
+
 The goal of GRR is to combine these methods and use their advantages. In addition, GRR has its own analogue of RTTI, which is compatible with compile-time types and is portable between compilers because it uses a limited representation of the type name through the `nameof` library. 
 
 ---
