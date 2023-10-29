@@ -68,4 +68,4 @@ This project uses several C++ libraries as dependencies:
 [nameof](https://github.com/Neargye/nameof)
 
 # License
-GRR is licensed under MIT license. Check the [LICENSE](https://github.com/vertver/grr/blob/master/LICENSE) file for more information.
+GRR is licensed under  Boost Software License, Version 1.0. Check the [LICENSE](https://github.com/vertver/grr/blob/master/LICENSE) file for more information.
