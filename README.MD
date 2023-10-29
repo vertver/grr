@@ -1,106 +1,67 @@
 # GRR - The reflection for games
 ![image](grr_logo.png)
 
-# How is it works?
-Pretty simple! There is an a example of usage:
+# Current status of GRR
+GRR is a **very** experimental library. You can use it in your project, but it is at your own risk (I can't guarantee that there are no bugs in this library). However, if you've found a bug and want to contribute, you are welcome to do so. Create an issue on GitHub or PR if you have already developed a fix or feature.
+
+---
+
+# How does it works?
+GRR uses multiple techniques to obtain information about structure on compilation time. 
+The first reflection method was described by [Anton Polukhin](https://github.com/apolukhin) at [Meeting C++ 2018](https://www.youtube.com/watch?v=UlNUNxLtBI0). This reflection method works through C++14 hack, which allows to represent a structure as `std::tuple`, which allows to access fields of the structure through indexes. The limitation of this method is the lack of field name information and the ability to work only with C-like structure (or otherwise PODs).
+The second method was implemented by [cbeck88](https://github.com/cbeck88) in [visit_struct](https://github.com/cbeck88/visit_struct) library, and it works from C++11 and higher. This method of reflection has the same advantages as the first one, with the only difference that we have access to the names of the structure and its fields. The disadvantage of this method is that it is necessary to create the structure through special macros or use a special `VISITABLE_STRUCT` macro to define all the fields of the structure.
+The goal of GRR is to combine these methods and use their advantages. In addition, GRR has its own analogue of RTTI, which is compatible with compile-time types and is portable between compilers because it uses a limited representation of the type name through the `nameof` library. 
+
+---
+
+# Examples
+First of all, very basic example of how to use this library:
 ```cpp
-    #include <grr/grr.hpp>
-    #include <iostream>
+#include <grr/grr.hpp>
 
-    struct my_custom_struct
-    {
-        int hello;
-        std::uint64_t world;
-        grr::string new_string;
-    };
-    // No other declaration required!
+struct TestStruct
+{
+    int test_1;
+    float test_2;
+    std::string test_3;
+};
 
-    // You also can use the "GRR_REFLECT" define to declare fields with names at compile time.
-    // Anyway, it equires to write every field of POD.
-    struct my_custom_reflected_struct
-    {
-        int another_hello;
-        std::uint64_t another_world;
-        grr::string another_new_string;
-    };
-    GRR_REFLECT(my_custom_reflected_struct, another_hello, another_world, another_new_string);
-
-    int main()
-    {
-        std::error_code err;
-        grr::context context = grr::make_context(err);
-        if (err) {
-            return -1;
-        }
-
-        // Register compile-time types
-        grr::add_type<my_custom_struct>(context, err);
-        grr::add_type<my_custom_reflected_struct>(context, err);
-
-        // Register run-time type
-        grr::type_declaration custom_type = grr::type_declaration(context, "My custom type");
-        custom_type.emplace<int>("hello", err);
-        custom_type.emplace<std::uint64_t>("world", err);
-        custom_type.emplace<grr::string>("string", err);
-        grr::add_type(context, custom_type, err);
-
-        {
-            my_custom_struct data;
-            std::cout << "Reflecting compile-time type without pre-declaration...";
-            grr::visit(context, data, err, 
-            //[](auto& field, const char* name) { // this also allowed, but names will be presented in "varX" format.
-            [](auto& field) {
-                field = {};
-            });
-        }
-
-        auto const_visit = [](const auto& field, const char* name) {
-            using FieldType = stl::clean_type<decltype(field)>;
-            if constexpr (std::is_same_v<FieldType, grr::string>) {
-                std::cout << name << ": " << field;
-            } else {
-                std::cout << name << ": " << std::to_string(field);
-            }
-        };
-
-        {
-            const my_custom_reflected_struct data = { 1, 2, "string" };  
-            std::cout << "Reflecting compile-time type with pre-declaration...";    
-            grr::visit(context, data, err, const_visit);
-        }
-
-        {
-            char data[64] = {};
-            std::cout << "Reflecting run-time type...";
-            grr::construct(context, data, custom_type.id, err);     // Call constructor on every field
-            grr::visit(context, data, err, const_visit);
-            grr::destruct(context, data, custom_type.id, err);      // Call destructor on every field
-        }
+int main()
+{
+    std::error_code err;
+    auto context = grr::make_context(err);
+    if (err) {
+        std::cout << err.message();
+        return -1;
     }
+
+    TestStruct test = {};
+    test.test_1 = 1;   
+    test.test_2 = 2.0f;
+    test.test_3 = "test";
+    grr::visit(context, test, err, [](const auto& field, const char* name){
+        using CleanType = grr::clean_type<decltype(field)>;
+        if constexpr (std::is_same_v<CleanType, std::string>) {
+            std::cout << name << ": " << field;
+        } else if constexpr (std::is_integral_v<CleanType>) {
+            std::cout << name << ": " << std::to_string(field);
+        }
+    });
+
+    return 0;
+}
 ```
 
-# TODO List:
-- Optimization
- - [ ] `grr::details::visit_static` algorithm must be optimized from O(n) to O(1)
- - [x] Compile-time `grr::visit`
- - [x] Fast run-time `grr::serializable_hash` 
-  - [x] Best solution will be the deleting of `grr::serializable_hash` function and move all string operations to `grr::type_name`
-- Bugs
- - [ ] `const void*` and `void*` don't appear in `grr::reflect` function
-- Features
- - [ ] Portable `grr::serializable_hash` between compilers
-  - [ ] Custom hasher for containers because of template arguments aliasing
-  - [x] Delete all platform-dependend parts in the name when hashing
-  - [x] Make type string more serialization-friendly
- - [ ] Serialization/Deserialization support
-  - [ ] Binary serialization
-  - [ ] String serialization
-  - [ ] Custom formats support
- - [ ] Full containers support (reflect all containers with pre-defined scalar types)
- - [x] Fields meta-data (markers, flags, etc)
-- Integrations
- - [ ] EnTT 
- - [ ] RapidJSON
-- Dependencies
- - [ ] pfr replacement
- - [ ] visit_struct replacement
+Other samples will be available in the future at [samples](https://github.com/vertver/grr/tree/master/samples) directory.
+
+# Requirements and Limitations
+GRR requires C++17 support and GRR can only be used only with C-like structures (or PODs) and can't reflect methods of structure. 
+
+# Acknowledgments
+This project uses several C++ libraries as dependencies:
+[PFR](https://github.com/apolukhin/pfr_non_boost)
+[visit_struct](https://github.com/cbeck88/visit_struct)
+[nameof](https://github.com/Neargye/nameof)
+
+# License
+GRR is licensed under MIT license. Check the [LICENSE](https://github.com/vertver/grr/blob/master/LICENSE) file for more information.
