@@ -61,7 +61,10 @@ namespace grr
 
 #ifndef GRR_CLANG_TYPES
 #ifdef __clang__
-#define GRR_CLANG_TYPES 
+#define GRR_CLANG_TYPES \
+    wchar_t, \
+    int, \
+    unsigned int, 
 #else
 #define GRR_CLANG_TYPES 
 #endif
@@ -123,7 +126,7 @@ namespace grr
             typename T::key_type,
             typename T::mapped_type,
             decltype(std::declval<T&>()[std::declval<const typename T::key_type&>()])>> 
-                : std::true_type { };	
+                : std::true_type { };   
         
         template<typename T, typename U = void>
         struct is_key_map : std::false_type { };
@@ -141,7 +144,7 @@ namespace grr
     template<typename T>
     struct is_key_value_map : detail::is_key_value_map<T>::type { };
     template<typename T>
-    constexpr bool is_key_value_map_v = is_key_value_map<T>::value;	
+    constexpr bool is_key_value_map_v = is_key_value_map<T>::value; 
     
     template<typename T>
     struct is_key_map : detail::is_key_map<T>::type { };
@@ -151,7 +154,7 @@ namespace grr
     template<typename T>
     struct is_container : detail::is_container<T>::type { };
     template<typename T>
-    constexpr bool is_container_v = is_container<T>::value;	
+    constexpr bool is_container_v = is_container<T>::value; 
 
     template<class T>
     using clean_type = std::remove_const_t<std::remove_reference_t<std::remove_cv_t<T>>>;
