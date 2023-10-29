@@ -37,6 +37,8 @@ int main()
         return -1;
     }
 
+    grr::add_type<TestStruct>(context);
+
     TestStruct test = {};
     test.test_1 = 1;   
     test.test_2 = 2.0f;
