@@ -36,7 +36,6 @@ cmake-build-debug
 
 # Folders
 .vs/
-bin/
 bins/
 build/
 out/
