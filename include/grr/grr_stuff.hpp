@@ -44,9 +44,7 @@
 namespace grr
 {
     template<typename T>
-    constexpr bool is_reflectable_v =
-        visit_struct::traits::is_visitable<T>::value ||
-        pfr::is_implicitly_reflectable<T, T>::value;
+    constexpr bool is_reflectable_v = boost::pfr::is_implicitly_reflectable<T, T>::value;
 }
 #else
 namespace grr

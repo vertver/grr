@@ -52,9 +52,6 @@ namespace grr
 
     struct field
     {
-        GRR_CONSTEXPR field(const char* new_name, typeid_t new_id, std::size_t new_offset, const vector<tag_t>& new_tags)
-            : name(new_name), id(new_id), offset(new_offset), tags(new_tags) {}
-
         GRR_CONSTEXPR field(const string_view& new_name, typeid_t new_id, std::size_t new_offset, const vector<tag_t>& new_tags)
             : name(new_name), id(new_id), offset(new_offset), tags(new_tags) {}
 
@@ -358,27 +355,27 @@ namespace grr
 
 #ifdef GRR_PREDECLARE_FIELDS
     template<typename T, typename Function>
-    static inline void visit(const grr::context& ctx, T& data, std::error_code& err, Function&& func)
+    static constexpr void visit(const grr::context& ctx, T& data, std::error_code& err, Function&& func)
     {
         using CleanType = grr::clean_type<T>;
 
-        auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
+        auto call_function = []<typename Func>(Func&& in_func, auto argument, const char* name) -> bool {
             using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
-            constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference>;
-            constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference, const char*>;
-            constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference>;
-            constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference, const char*>;
+            constexpr bool callable_1 = std::is_invocable_r_v<bool, Func, ArgumentLReference>;
+            constexpr bool callable_2 = std::is_invocable_r_v<bool, Func, ArgumentLReference, const char*>;
+            constexpr bool callable_3 = std::is_invocable_r_v<void, Func, ArgumentLReference>;
+            constexpr bool callable_4 = std::is_invocable_r_v<void, Func, ArgumentLReference, const char*>;
             static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not accepted");
 
             if constexpr (callable_1) {
-                return func(*argument);
+                return in_func(*argument);
             } else if constexpr (callable_2) {
-                return func(*argument, name);
+                return in_func(*argument, name);
             } else if constexpr (callable_3) {
-                func(*argument);
+                in_func(*argument);
                 return true;
             } else if constexpr (callable_4) {
-                func(*argument, name);
+                in_func(*argument, name);
                 return true;
             } else {
                 return false;
@@ -397,22 +394,22 @@ namespace grr
             return;
         }
 
-        if constexpr (pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
-            pfr::for_each_field(data, [&err, &type_info, &call_function, &func](auto& field, std::size_t index) {
+        if constexpr (boost::pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
+            boost::pfr::for_each_field(data,
+                [&err, &type_info, &call_function, &func]<typename U>(U& field, std::size_t index) {
                 if (err || index >= type_info.fields.size()) {
                     err = make_error_code(errors::invalid_ordering);
                     return;
                 }
 
                 const auto& field_info = type_info.fields.at(index);
-                if (grr::obtain_id<decltype(field)>() != field_info.id) {
+                if (grr::obtain_id<U>() != field_info.id) {
                     err = make_error_code(errors::invalid_type);
                     return;
                 }
 
                 call_function(func, &field, field_info.name.c_str());
-                index++;
-                });
+            });
         } else {
             err = make_error_code(errors::invalid_type);
         }
@@ -422,15 +419,6 @@ namespace grr
     static inline void visit_raw(T& data, std::error_code& err, Function&& func)
     {
         using CleanType = grr::clean_type<T>;
-        constexpr bool is_visitable = visit_struct::traits::is_visitable<CleanType>::value;
-        constexpr bool is_reflectable = pfr::is_implicitly_reflectable_v<CleanType, CleanType>;
-        if constexpr (is_visitable) {
-            constexpr std::size_t fields_count = visit_struct::field_count<CleanType>();
-            static_assert(
-                pfr::tuple_size_v<CleanType> == fields_count,
-                "Invalid field count in struct. Please, verify that everything is fine with your GRR_REFLECT declarations"
-            );
-        }
         
         auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
             using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
@@ -455,21 +443,10 @@ namespace grr
             }
         };
 
-        if constexpr (is_visitable) {
-            visit_struct::for_each(data, [&call_function, &func, &err](const char* name, auto& field) {
-                if (!call_function(func, &field, name)) {
-                    err = make_error_code(errors::invalid_argument);
-                }
-            });
-        } else if constexpr (is_reflectable) {
-            pfr::for_each_field(data, [&data, &call_function, &func, &err](auto& field) {
-                char name_storage[32] = {};
-                std::size_t offset = static_cast<std::size_t>(&field) - static_cast<std::size_t>(&data);
-                if (std::to_chars(name_storage, name_storage + 32, offset).ec != std::errc{}) {
-                    std::memcpy(name_storage, "name", 5);
-                }
-
-                if (call_function(func, &field, name_storage)) {
+        if constexpr (boost::pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
+            boost::pfr::for_each_field(data, [&data, &call_function, &func, &err](auto& field, std::size_t index) {
+                constexpr auto field_names = boost::pfr::names_as_array<CleanType>();
+                if (call_function(func, &field, field_names.at(index))) {
                     err = make_error_code(errors::invalid_argument);
                 }
             });
@@ -788,7 +765,7 @@ namespace grr
         vector<tag_t> tags;
 
     private:
-        bool field_erase(const char* field_name)
+        bool field_erase(const string_view& field_name)
         {
             const auto field_hash = binhash<std::uint32_t>(field_name);
             for (auto it = fields.begin(); it != fields.end(); it++) {
@@ -830,7 +807,7 @@ namespace grr
         GRR_CONSTEXPR type_declaration(const context& in_context, typeid_t in_id, const string_view& type_name, std::size_t new_size) noexcept
             : ctx(&in_context), name(type_name.begin(), type_name.end()), id(in_id), size(new_size), index(-1) {}
 
-        void emplace(const char* field_name, grr::typeid_t id, std::error_code& err)
+        void emplace(const string_view& field_name, grr::typeid_t id, std::error_code& err)
         {
             if (!grr::contains(*ctx, id)) {
                 err = make_error_code(errors::unregistered_id);
@@ -842,7 +819,7 @@ namespace grr
         }
 
         template<typename T>
-        void emplace(const char* field_name, std::error_code& err)
+        void emplace(const string_view& field_name, std::error_code& err)
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
@@ -855,7 +832,7 @@ namespace grr
         }     
         
         template<typename T>
-        void emplace(const char* field_name, const vector<tag_t>& tags, std::error_code& err)
+        void emplace(const string_view& field_name, const vector<tag_t>& tags, std::error_code& err)
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
@@ -868,7 +845,7 @@ namespace grr
         }
 
         template<typename T>
-        void emplace(const char* field_name, std::size_t offset, std::error_code& err)
+        void emplace(const string_view& field_name, std::size_t offset, std::error_code& err)
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
@@ -880,7 +857,7 @@ namespace grr
         }
                 
         template<typename T>
-        void emplace(const char* field_name, std::size_t offset, const vector<tag_t>& tags, std::error_code& err)
+        void emplace(const string_view& field_name, std::size_t offset, const vector<tag_t>& tags, std::error_code& err)
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
@@ -899,7 +876,7 @@ namespace grr
             }
         }
 
-        void erase(const char* field_name, std::error_code& err)
+        void erase(const string_view& field_name, std::error_code& err)
         {
             if (!field_erase(field_name)) {
                 err = make_error_code(errors::invalid_argument);
@@ -970,43 +947,20 @@ namespace grr
 
 #ifdef GRR_PREDECLARE_FIELDS
         if constexpr (is_aggregate) {
-            constexpr bool is_visitable = visit_struct::traits::is_visitable<CleanType>::value;
-            constexpr bool is_reflectable = pfr::is_implicitly_reflectable_v<CleanType, CleanType>;
             static_assert(grr::is_reflectable_v<CleanType>, "GRR compile-time reflection supports only aggregate types (such as PODs).");
-            if constexpr (is_visitable) {
-                constexpr std::size_t fields_count = visit_struct::field_count<CleanType>();
-                static_assert(
-                    pfr::tuple_size_v<CleanType> == fields_count,
-                    "Invalid field count in struct. Please, verify that everything is fine with your GRR_REFLECT declarations"
-                );
-            }
 
             const CleanType val = {};
-            if constexpr (is_visitable) {
-                visit_struct::for_each(val, [&err, &val, &new_type](const char* name, const auto& field) {
+            if constexpr (boost::pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
+                boost::pfr::for_each_field(val, [&err, &val, &new_type]<typename U>(const U& field, std::size_t index) {
+                    constexpr auto field_names = boost::pfr::names_as_array<CleanType>();
                     const std::ptrdiff_t offset = reinterpret_cast<std::ptrdiff_t>(&field) - reinterpret_cast<std::ptrdiff_t>(&val);
-                    new_type.emplace<grr::clean_type<decltype(field)>>(name, offset, err);
+
+                    new_type.emplace<grr::clean_type<U>>(field_names.at(index), offset, err);
                     if (err) {
                         return;
                     }
 
-                    new_type.size += sizeof(grr::clean_type<decltype(field)>);
-                });
-            } else if constexpr (is_reflectable) {
-                pfr::for_each_field(val, [&err, &val, &new_type](const auto& field) {
-                    const std::ptrdiff_t offset = reinterpret_cast<std::ptrdiff_t>(&field) - reinterpret_cast<std::ptrdiff_t>(&val);
-                    
-                    char field_name[32] = {};
-                    if (std::to_chars(field_name, field_name + 32, offset).ec != std::errc{}) {
-                        std::memcpy(field_name, "name", 5);
-                    }
-
-                    new_type.emplace<grr::clean_type<decltype(field)>>(field_name, offset, err);
-                    if (err) {
-                        return;
-                    }
-
-                    new_type.size += sizeof(grr::clean_type<decltype(field)>);
+                    new_type.size += sizeof(grr::clean_type<U>);
                 });
             }
         } else {

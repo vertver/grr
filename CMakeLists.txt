@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
 project(grr C CXX)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(GRR_TESTS "Enable tests build" OFF)
-option(GRR_SAMPLES "Enable samples build" OFF)
+option(GRR_SAMPLES "Enable samples build" ON)
 option(GRR_SERIALIZATION "Enable serialization support" OFF)
 option(GRR_PREDECLARE_FIELDS "Enable compile-time members pre-declaration" ON)
 option(GRR_TS_REFLECT "Enable experimental reflection TS feature" OFF) # not supported yet	
@@ -14,19 +14,9 @@ option(GRR_ENTT "Enable EnTT support" OFF)
 option(GRR_LUA "Enable Lua support" OFF)
 option(GRR_IMGUI "Enable ImGui support" OFF)
 
-if (CMAKE_CXX_STANDARD GREATER_EQUAL 20)
-	set(GRR_CXX20 ON)
-else()
-	option(GRR_CXX20 "Enable C++20 features" OFF)
-endif()
-
 add_library(grr INTERFACE)
 target_include_directories(grr INTERFACE "include")
-if (GRR_CXX20)
-	target_compile_features(grr INTERFACE cxx_std_20)
-else()
-	target_compile_features(grr INTERFACE cxx_std_17)
-endif()
+target_compile_features(grr INTERFACE cxx_std_20)
 
 if (GRR_SERIALIZATION)
 	target_compile_definitions(grr INTERFACE "GRR_SERIALIZATION")
@@ -56,11 +46,6 @@ endif()
 if (GRR_IMGUI)
 	target_compile_definitions(grr INTERFACE "GRR_IMGUI")
 	message(STATUS "[GRR]: ImGui support enabled.")
-endif()
-
-if (GRR_CXX20)
-	target_compile_definitions(grr INTERFACE "GRR_CXX20")
-	message(STATUS "[GRR]: C++20 support enabled.")
 endif()
 
 add_library(GRR::grr ALIAS grr)

@@ -59,7 +59,7 @@ int main()
 Other samples will be available in the future at [samples](https://github.com/vertver/grr/tree/master/samples) directory.
 
 # Requirements and Limitations
-GRR requires C++17 support and GRR can only be used only with C-like structures (or PODs) and can't reflect methods of structure. 
+GRR requires C++20 support and GRR can only be used only with C-like structures (or PODs) and can't reflect methods of structure. 
 
 # Acknowledgments
 This project uses several C++ libraries as dependencies:
