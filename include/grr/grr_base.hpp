@@ -446,7 +446,7 @@ namespace grr
         if constexpr (boost::pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
             boost::pfr::for_each_field(data, [&data, &call_function, &func, &err](auto& field, std::size_t index) {
                 constexpr auto field_names = boost::pfr::names_as_array<CleanType>();
-                if (call_function(func, &field, field_names.at(index))) {
+                if (call_function(func, &field, field_names.at(index).data())) {
                     err = make_error_code(errors::invalid_argument);
                 }
             });
