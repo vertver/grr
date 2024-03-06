@@ -38,34 +38,47 @@ namespace grr
             tname = err;
         }
 
-        std::string message(int c) const
+        std::string message(int c) const override
         {
             static const char* err_msg[] =
             {
-                "Invalid argument",
-                "Invalid type",
-                "Invalid ordering",
-                "Unregisted ID",
-                "Already registered",
-                "Parsing failed",
-                "Out of range"
+                "Invalid argument: ",
+                "Invalid type: ",
+                "Invalid ordering: ",
+                "Unregisted ID: ",
+                "Already registered: ",
+                "Parsing failed: ",
+                "Out of range: "
             };
 
-            return std::string(err_msg[c]) + std::string(tname.begin(), tname.end());
+            return std::string(err_msg[c]) + tname.data();
         }
 
-        const char* name() const noexcept { return "GRR Error code"; }
+        const char* name() const  noexcept override { return "GRR Error code"; }
+
+        const static error_category& get(const string_view& err)
+        {
+            const static error_category category_const(err);
+            return category_const;
+        }    
+        
+        template<typename T>
+        const static error_category& get()
+        {
+            const static error_category category_const(type_name<T>());
+            return category_const;
+        }
     };
 
     template<typename T>
     static inline std::error_code make_error_code(errors e)
     {
-        return std::error_code(static_cast<int>(e), error_category(type_name<T>()));
+        return std::error_code(static_cast<int>(e), error_category::get<T>());
     }   
     
     static inline std::error_code make_error_code(errors e, const string_view& name)
     {
-        return std::error_code(static_cast<int>(e), error_category(name));
+        return std::error_code(static_cast<int>(e), error_category::get(name));
     }
 
     struct field
@@ -818,7 +831,7 @@ namespace grr
         void emplace(const string_view& field_name, grr::typeid_t id, std::error_code& err)
         {
             if (!grr::contains(*ctx, id)) {
-                err = make_error_code(errors::unregistered_id, name);
+                err = make_error_code(errors::unregistered_id, field_name);
                 return;
             }
 
@@ -831,7 +844,7 @@ namespace grr
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
-                err = make_error_code(errors::unregistered_id, name);
+                err = make_error_code(errors::unregistered_id, field_name);
                 return;
             }
 
@@ -844,7 +857,7 @@ namespace grr
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
-                err = make_error_code(errors::unregistered_id, name);
+                err = make_error_code(errors::unregistered_id, field_name);
                 return;
             }
 
@@ -857,7 +870,7 @@ namespace grr
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
-                err = make_error_code(errors::unregistered_id, name);
+                err = make_error_code(errors::unregistered_id, field_name);
                 return;
             }
 
@@ -869,7 +882,7 @@ namespace grr
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
-                err = make_error_code(errors::unregistered_id, name);
+                err = make_error_code(errors::unregistered_id, field_name);
                 return;
             }
 
@@ -918,7 +931,7 @@ namespace grr
     static inline void add_type(context& ctx, const type_declaration& type, std::error_code& err)
     {
         if (ctx.contains(type.id)) {
-            err = make_error_code(errors::already_registered, "");
+            err = make_error_code(errors::already_registered, type.name);
             return;
         }
 
@@ -928,7 +941,7 @@ namespace grr
     static inline void add_type(context& ctx, const type_declaration& type, typeid_t base_type, std::error_code& err)
     {
         if (ctx.contains(type.id)) {
-            err = make_error_code(errors::already_registered, "");
+            err = make_error_code(errors::already_registered, type.name);
             return;
         }
 
@@ -939,7 +952,7 @@ namespace grr
     static constexpr void add_type(context& ctx, const type_declaration& type, std::error_code& err)
     {
         if (ctx.contains(type.id)) {
-            err = make_error_code<BaseType>(errors::already_registered);
+            err = make_error_code(errors::already_registered, type.name);
             return;
         }
 
