@@ -27,6 +27,7 @@
 #endif
 
 #include <charconv>
+#include <memory>
 
 #ifndef GRR_VECTOR
 #include <vector>

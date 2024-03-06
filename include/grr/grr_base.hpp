@@ -1013,6 +1013,13 @@ namespace grr
         detail::add_types<GRR_TYPES>(out_context, err);
         return out_context;
     }
+
+    static inline std::unique_ptr<context> make_context_ptr(std::error_code& err)
+    {
+        std::unique_ptr<context> out_context = std::make_unique<context>();
+        detail::add_types<GRR_TYPES>(*out_context, err);
+        return out_context;
+    }
 }
 
 #endif
