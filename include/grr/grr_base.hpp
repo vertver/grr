@@ -8,6 +8,16 @@
 
 namespace grr
 {
+    template<typename T>
+    static constexpr auto type_name()
+    {
+        if constexpr (reflectable<T>()) {
+            return nameof::nameof_short_type<T>();
+        } else {
+            return nameof::nameof_type<T>();
+        }
+    }
+
     enum class errors : int
     {
         invalid_argument,
@@ -21,6 +31,13 @@ namespace grr
 
     struct error_category : public std::error_category
     {
+        string_view tname;
+
+        error_category(const string_view& err) : std::error_category()
+        {
+            tname = err;
+        }
+
         std::string message(int c) const
         {
             static const char* err_msg[] =
@@ -34,20 +51,21 @@ namespace grr
                 "Out of range"
             };
 
-            return err_msg[c];
+            return std::string(err_msg[c]) + std::string(tname.begin(), tname.end());
         }
 
         const char* name() const noexcept { return "GRR Error code"; }
-        const static error_category& get()
-        {
-            const static error_category category_const;
-            return category_const;
-        }
     };
 
+    template<typename T>
     static inline std::error_code make_error_code(errors e)
     {
-        return std::error_code(static_cast<int>(e), error_category::get());
+        return std::error_code(static_cast<int>(e), error_category(type_name<T>()));
+    }   
+    
+    static inline std::error_code make_error_code(errors e, const string_view& name)
+    {
+        return std::error_code(static_cast<int>(e), error_category(name));
     }
 
     struct field
@@ -130,12 +148,12 @@ namespace grr
         {
             const auto& it = storage.find(id);
             if (it == storage.end()) {
-                err = make_error_code(errors::unregistered_id);
+                err = make_error_code(errors::unregistered_id, new_name);
                 return;
             }
 
             if (it->second.aggregate) {
-                err = make_error_code(errors::invalid_type);
+                err = make_error_code(errors::invalid_type, it->second.name);
                 return;
             }
 
@@ -146,12 +164,12 @@ namespace grr
         {
             const auto& it = storage.find(id);
             if (it == storage.end()) {
-                err = make_error_code(errors::unregistered_id);
+                err = make_error_code(errors::unregistered_id, new_name);
                 return;
             }
 
             if (it->second.aggregate) {
-                err = make_error_code(errors::invalid_type);
+                err = make_error_code(errors::invalid_type, it->second.name);
                 return;
             }
 
@@ -172,18 +190,27 @@ namespace grr
         {
             const auto& it = storage.find(id);
             if (it == storage.end()) {
-                err = make_error_code(errors::unregistered_id);
+                err = make_error_code(errors::unregistered_id, "");
                 return;
             }
 
             if (it->second.aggregate) {
-                err = make_error_code(errors::invalid_type);
+                err = make_error_code(errors::invalid_type, it->second.name);
                 return;
             }
 
             storage.erase(id);
         }
     };
+
+    static inline string_view type_name(const context& ctx, typeid_t id)
+    {
+        if (!ctx.contains(id)) {
+            return "";
+        }
+
+        return string_view(ctx.at(id).name.begin(), ctx.at(id).name.end());
+    }
 
     template<typename T>
     static constexpr bool reflectable()
@@ -198,25 +225,6 @@ namespace grr
         }
 
         return !ctx.at(id).fields.empty();
-    }
-
-    template<typename T>
-    static constexpr auto type_name()
-    {
-        if constexpr (reflectable<T>()) {
-            return nameof::nameof_short_type<T>();
-        } else {
-            return nameof::nameof_type<T>();
-        }
-    }
-
-    static inline string_view type_name(const context& ctx, typeid_t id)
-    {
-        if (!ctx.contains(id)) {
-            return "";
-        }
-
-        return string_view(ctx.at(id).name.begin(), ctx.at(id).name.end());
     }
 
     template<typename T>
@@ -316,13 +324,13 @@ namespace grr
     static inline std::size_t offset(const context& ctx, typeid_t id, std::size_t field_idx, std::error_code& err)
     {
         if (!ctx.contains(id)) {
-            err = make_error_code(errors::unregistered_id);
+            err = make_error_code(errors::unregistered_id, "");
             return 0;
         }
 
         auto& fields = ctx.at(id).fields;
         if (field_idx >= fields.size()) {
-            err = make_error_code(errors::invalid_argument);
+            err = make_error_code(errors::invalid_argument, ctx.at(id).name);
             return 0;
         }
 
@@ -384,13 +392,13 @@ namespace grr
 
         constexpr typeid_t id = grr::obtain_id<T>();
         if (!ctx.contains(id)) {
-            err = make_error_code(errors::unregistered_id);
+            err = make_error_code<T>(errors::unregistered_id);
             return;
         }
 
         const auto& type_info = ctx.at(id);
         if (type_info.fields.empty()) {
-            err = make_error_code(errors::invalid_type);
+            err = make_error_code<T>(errors::invalid_type);
             return;
         }
 
@@ -398,20 +406,20 @@ namespace grr
             boost::pfr::for_each_field(data,
                 [&err, &type_info, &call_function, &func]<typename U>(U& field, std::size_t index) {
                 if (err || index >= type_info.fields.size()) {
-                    err = make_error_code(errors::invalid_ordering);
+                    err = make_error_code<T>(errors::invalid_ordering);
                     return;
                 }
 
                 const auto& field_info = type_info.fields.at(index);
                 if (grr::obtain_id<U>() != field_info.id) {
-                    err = make_error_code(errors::invalid_type);
+                    err = make_error_code<T>(errors::invalid_type);
                     return;
                 }
 
                 call_function(func, &field, field_info.name.c_str());
             });
         } else {
-            err = make_error_code(errors::invalid_type);
+            err = make_error_code<T>(errors::invalid_type);
         }
     }
 
@@ -447,11 +455,11 @@ namespace grr
             boost::pfr::for_each_field(data, [&data, &call_function, &func, &err](auto& field, std::size_t index) {
                 constexpr auto field_names = boost::pfr::names_as_array<CleanType>();
                 if (call_function(func, &field, field_names.at(index).data())) {
-                    err = make_error_code(errors::invalid_argument);
+                    err = make_error_code<T>(errors::invalid_argument);
                 }
             });
         } else {
-            err = make_error_code(errors::invalid_type);
+            err = make_error_code<T>(errors::invalid_type);
         }
     }
 #endif
@@ -659,12 +667,12 @@ namespace grr
                 }
 
                 if (!ctx.contains(id)) {
-                    err = make_error_code(errors::unregistered_id);
+                    err = make_error_code<Data>(errors::unregistered_id);
                     return;
                 }
     
                 if (!call_function(func, type_ptr, id, type_info.size)) {
-                    err = make_error_code(errors::invalid_argument);
+                    err = make_error_code<Data>(errors::invalid_argument);
                     return;
                 }
             } else {
@@ -691,13 +699,13 @@ namespace grr
                         }
 
                         if (!ctx.contains(field_id)) {
-                            err = make_error_code(errors::unregistered_id);
+                            err = make_error_code<Data>(errors::unregistered_id);
                             return;
                         }
 
                         auto& field_type = ctx.obtain(field_id);
                         if (!call_function(func, field_ptr, field_id, field_type.size)) {
-                            err = make_error_code(errors::invalid_argument);
+                            err = make_error_code<Data>(errors::invalid_argument);
                             return;
                         }
                     }
@@ -710,7 +718,7 @@ namespace grr
     static inline void visit(const grr::context& ctx, Data data, typeid_t id, std::error_code& err, Function&& func)
     {
         if (!ctx.contains(id)) {
-            err = make_error_code(errors::unregistered_id);
+            err = make_error_code<Data>(errors::unregistered_id);
             return;
         }
 
@@ -810,7 +818,7 @@ namespace grr
         void emplace(const string_view& field_name, grr::typeid_t id, std::error_code& err)
         {
             if (!grr::contains(*ctx, id)) {
-                err = make_error_code(errors::unregistered_id);
+                err = make_error_code(errors::unregistered_id, name);
                 return;
             }
 
@@ -823,7 +831,7 @@ namespace grr
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
-                err = make_error_code(errors::unregistered_id);
+                err = make_error_code(errors::unregistered_id, name);
                 return;
             }
 
@@ -836,7 +844,7 @@ namespace grr
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
-                err = make_error_code(errors::unregistered_id);
+                err = make_error_code(errors::unregistered_id, name);
                 return;
             }
 
@@ -849,7 +857,7 @@ namespace grr
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
-                err = make_error_code(errors::unregistered_id);
+                err = make_error_code(errors::unregistered_id, name);
                 return;
             }
 
@@ -861,7 +869,7 @@ namespace grr
         {
             constexpr typeid_t current_id = obtain_id<T>();
             if (!grr::contains(*ctx, current_id)) {
-                err = make_error_code(errors::unregistered_id);
+                err = make_error_code(errors::unregistered_id, name);
                 return;
             }
 
@@ -871,7 +879,7 @@ namespace grr
         void erase(std::size_t idx, std::error_code& err)
         {
             if (!field_erase(idx)) {
-                err = make_error_code(errors::invalid_argument);
+                err = make_error_code(errors::invalid_argument, name);
                 return;
             }
         }
@@ -879,7 +887,7 @@ namespace grr
         void erase(const string_view& field_name, std::error_code& err)
         {
             if (!field_erase(field_name)) {
-                err = make_error_code(errors::invalid_argument);
+                err = make_error_code(errors::invalid_argument, name);
                 return;
             }
         }
@@ -888,7 +896,7 @@ namespace grr
     static inline void remove_type(context& ctx, typeid_t id, std::error_code& err)
     {
         if (!ctx.contains(id)) {
-            err = make_error_code(errors::unregistered_id);
+            err = make_error_code(errors::unregistered_id, "");
             return;
         }
 
@@ -900,7 +908,7 @@ namespace grr
     {
         constexpr typeid_t current_id = obtain_id<T>();
         if (!ctx.contains(current_id)) {
-            err = make_error_code(errors::unregistered_id);
+            err = make_error_code<T>(errors::unregistered_id);
             return;
         }
 
@@ -910,7 +918,7 @@ namespace grr
     static inline void add_type(context& ctx, const type_declaration& type, std::error_code& err)
     {
         if (ctx.contains(type.id)) {
-            err = make_error_code(errors::already_registered);
+            err = make_error_code(errors::already_registered, "");
             return;
         }
 
@@ -920,7 +928,7 @@ namespace grr
     static inline void add_type(context& ctx, const type_declaration& type, typeid_t base_type, std::error_code& err)
     {
         if (ctx.contains(type.id)) {
-            err = make_error_code(errors::already_registered);
+            err = make_error_code(errors::already_registered, "");
             return;
         }
 
@@ -931,7 +939,7 @@ namespace grr
     static constexpr void add_type(context& ctx, const type_declaration& type, std::error_code& err)
     {
         if (ctx.contains(type.id)) {
-            err = make_error_code(errors::already_registered);
+            err = make_error_code<BaseType>(errors::already_registered);
             return;
         }
 

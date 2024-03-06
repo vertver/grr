@@ -293,13 +293,13 @@ namespace grr
             CleanType out_value;
             std::size_t offset = value.find_first_of('{');
             if (offset == std::size_t(-1)) {
-                err = make_error_code(errors::parsing_failed);
+                err = make_error_code(errors::parsing_failed, "missing bracket");
                 return out_value;
             }
 
             offset = value.find_first_not_of(' ', offset + 1);
             if (offset == std::size_t(-1)) {
-                err = make_error_code(errors::parsing_failed);
+                err = make_error_code(errors::parsing_failed, "missing space");
                 return out_value;
             }
 
@@ -332,7 +332,7 @@ namespace grr
                     std::size_t value_offset_begin = value.find_first_of('{', offset);
                     std::size_t value_offset_end = value.find_first_of('}', value_offset_begin);
                     if (value_offset_begin == std::size_t(-1)) {
-                        err = make_error_code(errors::parsing_failed);
+                        err = make_error_code(errors::parsing_failed, "missing begin bracket");
                         return out_value;
                     }
 
