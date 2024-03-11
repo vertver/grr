@@ -468,11 +468,51 @@ namespace grr
             boost::pfr::for_each_field(data, [&data, &call_function, &func, &err](auto& field, std::size_t index) {
                 constexpr auto field_names = boost::pfr::names_as_array<CleanType>();
                 if (call_function(func, &field, field_names.at(index).data())) {
-                    err = make_error_code<T>(errors::invalid_argument);
+                    err = make_error_code<CleanType>(errors::invalid_argument);
                 }
             });
         } else {
-            err = make_error_code<T>(errors::invalid_type);
+            err = make_error_code<CleanType>(errors::invalid_type);
+        }
+    } 
+    
+    template<typename T, typename Function>
+    static inline void visit_raw(const T& data, std::error_code& err, Function&& func)
+    {
+        using CleanType = grr::clean_type<T>;
+        
+        auto call_function = [](auto&& func, auto argument, const char* name) -> bool {
+            using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
+            constexpr bool callable_1 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference>;
+            constexpr bool callable_2 = std::is_invocable_r_v<bool, decltype(func), ArgumentLReference, const char*>;
+            constexpr bool callable_3 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference>;
+            constexpr bool callable_4 = std::is_invocable_r_v<void, decltype(func), ArgumentLReference, const char*>;
+            static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not accepted");
+
+            if constexpr (callable_1) {
+                return func(*argument);
+            } else if constexpr (callable_2) {
+                return func(*argument, name);
+            } else if constexpr (callable_3) {
+                func(*argument);
+                return true;
+            } else if constexpr (callable_4) {
+                func(*argument, name);
+                return true;
+            } else {
+                return false;
+            }
+        };
+
+        if constexpr (boost::pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
+            boost::pfr::for_each_field(data, [&data, &call_function, &func, &err](auto& field, std::size_t index) {
+                constexpr auto field_names = boost::pfr::names_as_array<CleanType>();
+                if (call_function(func, &field, field_names.at(index).data())) {
+                    err = make_error_code<CleanType>(errors::invalid_argument);
+                }
+            });
+        } else {
+            err = make_error_code<CleanType>(errors::invalid_type);
         }
     }
 #endif
