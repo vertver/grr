@@ -159,34 +159,34 @@ namespace grr
 
         void rename(typeid_t id, const char* new_name, std::error_code& err)
         {
-            const auto& it = storage.find(id);
-            if (it == storage.end()) {
+            if (!storage.contains(id)) {
                 err = make_error_code(errors::unregistered_id, new_name);
                 return;
             }
 
-            if (it->second.aggregate) {
-                err = make_error_code(errors::invalid_type, it->second.name);
+            auto& value = storage.at(id);
+            if (value.aggregate) {
+                err = make_error_code(errors::invalid_type, value.name);
                 return;
             }
 
-            it->second.name = new_name;
+            value.name = new_name;
         }
 
         void rename(typeid_t id, const string_view& new_name, std::error_code& err)
         {
-            const auto& it = storage.find(id);
-            if (it == storage.end()) {
+            if (!storage.contains(id)) {
                 err = make_error_code(errors::unregistered_id, new_name);
                 return;
             }
 
-            if (it->second.aggregate) {
-                err = make_error_code(errors::invalid_type, it->second.name);
+            auto& value = storage.at(id);
+            if (value.aggregate) {
+                err = make_error_code(errors::invalid_type, value.name);
                 return;
             }
 
-            it->second.name = string(new_name.begin(), new_name.end());
+            value.name = string(new_name.begin(), new_name.end());
         }
 
         void emplace(typeid_t id, const type_context& type)
