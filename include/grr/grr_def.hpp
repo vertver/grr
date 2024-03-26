@@ -74,6 +74,11 @@
 #define GRR_WIDESTRING_VIEW
 #endif
 
+#ifndef GRR_FUNCTION
+#include <functional>
+#define GRR_FUNCTION std::function
+#endif
+
 #ifdef GRR_PREDECLARE_FIELDS
 #ifndef PFR_HPP
 #include <boost/pfr.hpp>

@@ -376,68 +376,7 @@ namespace grr
 
 #ifdef GRR_PREDECLARE_FIELDS
     template<typename T, typename Function>
-    static constexpr void visit(const grr::context& ctx, T& data, std::error_code& err, Function&& func)
-    {
-        using CleanType = grr::clean_type<T>;
-
-        auto call_function = []<typename Func>(Func&& in_func, auto argument, const char* name) -> bool {
-            using ArgumentLReference = std::add_lvalue_reference_t<decltype(*argument)>;
-            constexpr bool callable_1 = std::is_invocable_r_v<bool, Func, ArgumentLReference>;
-            constexpr bool callable_2 = std::is_invocable_r_v<bool, Func, ArgumentLReference, const char*>;
-            constexpr bool callable_3 = std::is_invocable_r_v<void, Func, ArgumentLReference>;
-            constexpr bool callable_4 = std::is_invocable_r_v<void, Func, ArgumentLReference, const char*>;
-            static_assert(callable_1 || callable_2 || callable_3 || callable_4, "Captured function is not accepted");
-
-            if constexpr (callable_1) {
-                return in_func(*argument);
-            } else if constexpr (callable_2) {
-                return in_func(*argument, name);
-            } else if constexpr (callable_3) {
-                in_func(*argument);
-                return true;
-            } else if constexpr (callable_4) {
-                in_func(*argument, name);
-                return true;
-            } else {
-                return false;
-            }
-        };
-
-        constexpr typeid_t id = grr::obtain_id<T>();
-        if (!ctx.contains(id)) {
-            err = make_error_code<T>(errors::unregistered_id);
-            return;
-        }
-
-        const auto& type_info = ctx.at(id);
-        if (type_info.fields.empty()) {
-            err = make_error_code<T>(errors::invalid_type);
-            return;
-        }
-
-        if constexpr (boost::pfr::is_implicitly_reflectable_v<CleanType, CleanType>) {
-            boost::pfr::for_each_field(data,
-                [&err, &type_info, &call_function, &func]<typename U>(U& field, std::size_t index) {
-                if (err || index >= type_info.fields.size()) {
-                    err = make_error_code<T>(errors::invalid_ordering);
-                    return;
-                }
-
-                const auto& field_info = type_info.fields.at(index);
-                if (grr::obtain_id<U>() != field_info.id) {
-                    err = make_error_code<T>(errors::invalid_type);
-                    return;
-                }
-
-                call_function(func, &field, field_info.name.c_str());
-            });
-        } else {
-            err = make_error_code<T>(errors::invalid_type);
-        }
-    }
-
-    template<typename T, typename Function>
-    static inline void visit_raw(T& data, std::error_code& err, Function&& func)
+    static inline void visit(T& data, std::error_code& err, Function&& func)
     {
         using CleanType = grr::clean_type<T>;
         
@@ -477,7 +416,7 @@ namespace grr
     } 
     
     template<typename T, typename Function>
-    static inline void visit_raw(const T& data, std::error_code& err, Function&& func)
+    static inline void visit(const T& data, std::error_code& err, Function&& func)
     {
         using CleanType = grr::clean_type<T>;
         
@@ -658,10 +597,10 @@ namespace grr
                     return;
                 }
 
-                visit_static<CleanType>(&data, id, "dummy", called, [&ctx, &func](auto& value) {
+                visit_static<CleanType>(&data, id, "dummy", called, [&func](auto& value) {
                     if constexpr (std::is_same_v<grr::clean_type<decltype(value)>, CleanType>) {
                         std::error_code err;
-                        grr::visit<CleanType>(ctx, value, err, func);
+                        grr::visit<CleanType>(value, err, func);
                     }
                 });
             }
@@ -676,7 +615,7 @@ namespace grr
         }
 #endif
 
-        template<std::size_t recursion_level = 0, typename Function, typename Data>
+        template<typename Function, typename Data>
         static inline void visit(const grr::context& ctx, Data data, typeid_t id, std::error_code& err, Function&& func)
         {
             // [](auto& field, const char* name)
@@ -744,30 +683,26 @@ namespace grr
                         field_ptr = static_cast<char*>(data) + cfield.offset;
                     }
 
-                    if constexpr (recursion_level > 0) {
-                        visit<recursion_level - 1>(ctx, field_ptr, field_id);
-                    } else {
-                        if (detail::visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
-                            continue;
-                        }
+                    if (detail::visit_static<GRR_TYPES>(field_ptr, cfield.name.data(), cfield.id, func)) {
+                        continue;
+                    }
 
-                        if (!ctx.contains(field_id)) {
-                            err = make_error_code<Data>(errors::unregistered_id);
-                            return;
-                        }
+                    if (!ctx.contains(field_id)) {
+                        err = make_error_code<Data>(errors::unregistered_id);
+                        return;
+                    }
 
-                        auto& field_type = ctx.obtain(field_id);
-                        if (!call_function(func, field_ptr, field_id, field_type.size)) {
-                            err = make_error_code<Data>(errors::invalid_argument);
-                            return;
-                        }
+                    auto& field_type = ctx.obtain(field_id);
+                    if (!call_function(func, field_ptr, field_id, field_type.size)) {
+                        err = make_error_code<Data>(errors::invalid_argument);
+                        return;
                     }
                 }
             }
         }
     }
 
-    template<std::size_t recursion_level = 0, typename Function, typename Data>
+    template<typename Function, typename Data>
     static inline void visit(const grr::context& ctx, Data data, typeid_t id, std::error_code& err, Function&& func)
     {
         if (!ctx.contains(id)) {
@@ -775,7 +710,7 @@ namespace grr
             return;
         }
 
-        grr::detail::visit<recursion_level>(ctx, data, id, err, func);
+        grr::detail::visit(ctx, data, id, err, func);
         if (err) {
             return;
         }

@@ -44,6 +44,9 @@ namespace grr
 
     using ptr_pair = std::pair<std::uint64_t, std::pair<void*, typeid_t>>;
     using const_ptr_pair = std::pair<std::uint64_t, std::pair<const void*, typeid_t>>;
+
+    template<typename T>
+    using function = GRR_FUNCTION<T>;
 }
 
 #ifndef GRR_MSVC_TYPES
