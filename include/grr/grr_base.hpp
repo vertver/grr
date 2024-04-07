@@ -597,7 +597,7 @@ namespace grr
                     return;
                 }
 
-                visit_static<CleanType>(&data, id, "dummy", called, [&func](auto& value) {
+                visit_static<CleanType>(data, id, "dummy", called, [&func](auto& value) {
                     if constexpr (std::is_same_v<grr::clean_type<decltype(value)>, CleanType>) {
                         std::error_code err;
                         grr::visit<CleanType>(value, err, func);
